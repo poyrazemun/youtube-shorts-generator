@@ -50,6 +50,9 @@ ENV/
 Thumbs.db
 desktop.ini
 
+# ── Dev reference docs (kept in Claude memory, not in repo) ───────────────────
+PROJECT_CONTEXT.md
+
 # ── IDE ───────────────────────────────────────────────────────────────────────
 .vscode/
 .idea/

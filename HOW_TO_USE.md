@@ -97,7 +97,7 @@ To run daily without touching your PC:
 2. Set trigger to **Daily** at your preferred time
 3. Set action to run:
    ```
-   python C:\Users\ASUS\CLAUDE-THINGS\unreal-history-bot\orchestrator.py --auto
+   python C:\path\to\unreal-history-bot\orchestrator.py --auto
    ```
 4. Add a **weekly** task for `--refresh-topics` to keep the topic queue fresh with new ideas
 
@@ -107,7 +107,7 @@ To run daily without touching your PC:
 
 | Step | Name              | What it does                                      |
 |------|-------------------|---------------------------------------------------|
-| 1    | Event Discovery   | Claude finds 2–4 strange real historical events   |
+| 1    | Event Discovery   | Claude finds 1 strange real historical event      |
 | 2    | Script Generation | Claude writes a viral 20–30 second script per event |
 | 3    | Image Generation  | AI generates 5 cinematic images per event         |
 | 4    | Voice Generation  | Text-to-speech narration (Edge TTS)               |

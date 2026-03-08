@@ -1,147 +1,211 @@
 # Unreal History Bot
 
-Automated YouTube Shorts generator for the "Unreal History" channel —
-real historical events that sound unbelievable.
+A fully automated YouTube Shorts pipeline that discovers strange real historical events, generates scripts, creates images, records voiceover, assembles videos, and uploads them to YouTube — all without human input after setup.
 
-## Quick Start
+Built entirely with **[Claude Code](https://claude.ai/claude-code)**, using its agent and skill system for architecture planning, codebase exploration, and iterative implementation across multiple sessions.
 
-```bash
-# 1. Install dependencies
-pip install -r requirements.txt
+---
 
-# 2. Configure environment
-cp .env.example .env
-# Edit .env — required: ANTHROPIC_API_KEY
-# Optional but recommended: HUGGINGFACE_API_TOKEN (free at huggingface.co)
+## How It Works
 
-# 3. Install ffmpeg (required)
-# Windows: winget install ffmpeg
-# macOS:   brew install ffmpeg
-# Linux:   sudo apt install ffmpeg
-
-# 4. Run
-python orchestrator.py --topic "Strange Moments in History" --keyword "war" --count 5
-
-# Skip upload while testing
-python orchestrator.py --topic "Strange Moments in History" --keyword "war" --count 1 --no-upload
+```
+--refresh-topics        Claude generates a queue of topic/keyword combos
+       ↓
+--auto (daily, via GitHub Actions)
+       ↓
+  Step 1  event_discovery.py    Claude → 1 strange historical event
+  Step 2  script_generator.py   Claude + DuckDuckGo research → viral script + SEO metadata
+  Step 3  image_generator.py    HuggingFace FLUX.1-schnell → 5 cinematic images
+  Step 4  tts_generator.py      Edge TTS (Microsoft Neural) → narration audio
+  Step 5a captions.py           Whisper / estimation → word-timed subtitles
+  Step 5b video_assembler.py    ffmpeg → 1080×1920 MP4 with burned captions + background music
+  Step 6  youtube_uploader.py   YouTube Data API v3 → upload with thumbnail
+       ↓
+--analytics             Fetches view counts, feeds performance data back into topic generation
 ```
 
-## Pipeline Steps
+Every step is **resumable** — output is cached to disk, so re-running picks up where it left off.
 
-| Step | Module | Description | Tool |
-|------|--------|-------------|------|
-| 1 | `event_discovery.py` | Generate historical events | Claude API |
-| 2 | `script_generator.py` | Write viral Short scripts + SEO metadata | Claude API |
-| 3 | `image_generator.py` | Generate 5 images per event | A1111 / ComfyUI / HuggingFace / Pollinations / PIL |
-| 4 | `tts_generator.py` | Generate voiceover audio | Piper / Coqui / Edge TTS |
-| 5a | `captions.py` | Generate word-timed captions | Whisper / estimation fallback |
-| 5b | `video_assembler.py` | Assemble final MP4 with burned subtitles | ffmpeg |
-| 6 | `youtube_uploader.py` | Upload to YouTube | YouTube Data API v3 |
+---
+
+## Requirements
+
+- Python 3.10+
+- ffmpeg on PATH
+- Anthropic API key (Claude)
+- YouTube Data API v3 OAuth credentials
+- HuggingFace API token (optional — free tier, for better images)
+
+```bash
+pip install -r requirements.txt
+```
+
+```bash
+# Windows
+winget install ffmpeg
+
+# macOS
+brew install ffmpeg
+
+# Linux
+sudo apt install ffmpeg
+```
+
+---
+
+## Setup
+
+**1. Environment**
+
+```bash
+cp .env.example .env
+```
+
+```env
+ANTHROPIC_API_KEY=sk-ant-...
+HUGGINGFACE_API_TOKEN=hf_...     # optional
+YOUTUBE_PRIVACY=private
+```
+
+**2. YouTube API credentials**
+
+- Google Cloud Console → Enable YouTube Data API v3
+- Create OAuth 2.0 Client ID (Desktop app) → download as `client_secrets.json`
+- Place in project root
+
+**3. First run (opens browser for YouTube OAuth)**
+
+```bash
+python orchestrator.py --analytics
+```
+
+---
+
+## CLI
+
+```bash
+# Automated mode — picks next topic from queue, runs full pipeline
+python orchestrator.py --auto
+
+# Regenerate topic queue (Claude generates 25 combos; auto-refreshes on Mondays via Actions)
+python orchestrator.py --refresh-topics
+
+# Fetch YouTube analytics + print performance summary
+python orchestrator.py --analytics
+
+# Manual mode
+python orchestrator.py --topic "Strange War Stories" --keyword "battle" [--count N] [--no-upload]
+
+# Flags available on all modes
+--no-upload    skip YouTube upload, save videos locally
+--verbose      DEBUG-level console logging
+```
+
+---
+
+## GitHub Actions (Daily Automation)
+
+The included `.github/workflows/daily.yml` runs `--auto` every day at 09:00 UTC.
+
+**Required GitHub Secrets:**
+
+| Secret | Value |
+|---|---|
+| `ANTHROPIC_API_KEY` | Anthropic API key |
+| `HUGGINGFACE_API_TOKEN` | HuggingFace token |
+| `YOUTUBE_CLIENT_SECRETS_B64` | `base64(client_secrets.json)` |
+| `YOUTUBE_CREDENTIALS_B64` | `base64(credentials.json)` |
+
+```bash
+# Encode credentials for GitHub Secrets
+python -c "import base64; print(base64.b64encode(open('client_secrets.json','rb').read()).decode())"
+python -c "import base64; print(base64.b64encode(open('credentials.json','rb').read()).decode())"
+```
+
+The workflow automatically:
+- Installs ffmpeg
+- Decodes credentials from secrets
+- Runs `--refresh-topics` if the queue is empty or it's Monday
+- Commits updated `topics_queue.json` back to the repo
+- Uploads generated `.mp4` files as downloadable artifacts (7-day retention)
+
+See [HOW_TO_USE.md](HOW_TO_USE.md) for the full step-by-step setup guide.
+
+---
 
 ## Image Generation (Priority Order)
 
-1. **Automatic1111** (local) — Start with `--api` flag: `python webui.py --api`
-2. **ComfyUI** (local) — Start normally, API is enabled by default
-3. **HuggingFace** (remote, free tier) — Add `HUGGINGFACE_API_TOKEN` to `.env`
-   Model: `black-forest-labs/FLUX.1-schnell`
-4. **Pollinations.AI** (remote, no key) — Free but occasionally unreliable
-5. **PIL placeholder** (offline, always works) — Dark gradient + event text; guaranteed fallback
+| Priority | Backend | Requirement |
+|---|---|---|
+| 1 | Automatic1111 (local) | Running with `--api` flag |
+| 2 | ComfyUI (local) | Running normally |
+| 3 | **HuggingFace** | `HUGGINGFACE_API_TOKEN` in `.env` |
+| 4 | Pollinations.AI | Internet only, no key needed |
+| 5 | PIL placeholder | Always available (offline fallback) |
 
 Each image is retried up to 3 times with exponential backoff before falling back to the next backend.
 
+---
+
 ## Voice Generation (Priority Order)
 
-1. **Piper TTS** (local) — Download from https://github.com/rhasspy/piper/releases
-2. **Coqui TTS** (local) — `pip install TTS`
-3. **Edge TTS** (online, free) — Microsoft Neural voices; `en-US-ChristopherNeural`. Installed via requirements.txt.
+| Priority | Backend | Requirement |
+|---|---|---|
+| 1 | Piper TTS (local) | Binary on PATH |
+| 2 | Coqui TTS (local) | `pip install TTS` |
+| 3 | **Edge TTS** | Included in requirements.txt |
 
-All backends output WAV. Edge TTS outputs MP3 which is auto-converted to WAV via ffmpeg.
+Default voice: `en-US-ChristopherNeural`
 
-## Captions
-
-Captions are generated in Step 5a and burned into the video in Step 5b.
-
-| Mode | Requirement | Quality |
-|------|-------------|---------|
-| **Whisper** | `pip install openai-whisper` (~500MB PyTorch) | Real word timestamps, in-sync |
-| **Estimation** | Nothing (always available) | Proportional timing, may drift |
-
-The pipeline auto-detects which mode to use. Install Whisper to upgrade:
-```bash
-pip install openai-whisper
-```
-
-## YouTube Setup
-
-1. Go to [Google Cloud Console](https://console.cloud.google.com/)
-2. Create a project → Enable **YouTube Data API v3**
-3. Create OAuth 2.0 credentials (Desktop app type)
-4. Download the JSON → save as `client_secrets.json`
-5. First run will open your browser for authorization
-6. Token saved to `credentials.json` for future runs
-
-## CLI Options
-
-```
-python orchestrator.py --topic TOPIC --keyword KEYWORD [--count N] [--no-upload]
-
-Options:
-  --topic      Channel topic / batch description
-  --keyword    Keyword to focus event discovery
-  --count      Number of videos to generate (default: 3, max: 20)
-  --no-upload  Skip YouTube upload, save videos locally only
-```
-
-## Resumable Pipeline
-
-Each step saves output to `output/<slug>/` before the next step runs.
-If a step fails, simply re-run the same command — completed steps are skipped.
-Per-event completion is also tracked in `state.json`.
-
-```
-output/
-  strange_moments_in_history_war/
-    events.json              Step 1 cache
-    scripts.json             Step 2 cache
-    images/0/img_0..4.png    Step 3 cache (5 images per event)
-    audio/0.wav              Step 4 cache
-    subtitles/0.srt          Step 5a cache (estimation SRT)
-    subtitles/0_captions.ass Step 5a cache (Whisper ASS, if installed)
-    video/0.mp4              Step 5b cache
-    state.json               Per-event stage completion ledger
-    uploads.json             Step 6 upload IDs and URLs
-  strange_moments_in_history_war_0_Event_Title.mp4   Final output copy
-```
-
-To clear cache and re-run from scratch, delete the slug's folder:
-```bash
-rm -rf output/strange_moments_in_history_war
-```
+---
 
 ## Output Format
 
-- **Video**: 1080×1920 (9:16 vertical), H.264, 24fps
-- **Audio**: AAC 128kbps, Edge TTS `en-US-ChristopherNeural`
-- **Duration**: 20–30 seconds (matches actual audio length)
-- **Subtitles**: Burned in, white bold text, 50% transparent black box background
+- **Resolution**: 1080×1920 (9:16 vertical)
+- **Codec**: H.264, AAC 128kbps, 24fps
+- **Duration**: 20–30 seconds
+- **Subtitles**: Burned in, white bold text, semi-transparent background box
+- **Thumbnail**: 1280×720 PNG, uploaded to YouTube
 
-## Resilience
+---
 
-All external API calls use exponential backoff retry (3 attempts, 2s → 4s → 8s delay):
-- Claude API (event + script generation)
-- HuggingFace Inference API (image generation)
-- Pollinations.AI (image fallback)
-- Edge TTS (audio generation)
-- YouTube upload
+## Output Structure
 
-## Cost Estimate (per 5 videos, using HuggingFace free tier)
+```
+output/
+  <slug>/
+    events.json       step 1 — discovered event
+    scripts.json      step 2 — script + SEO metadata
+    images/           step 3 — 5 PNG images
+    audio/            step 4 — narration WAV
+    subtitles/        step 5a — .ass + .srt caption files
+    video/            step 5b — assembled MP4
+    thumbnails/       step 6 — YouTube thumbnail
+    uploads.json      step 6 — video IDs + URLs
+    state.json        per-step completion ledger
+
+topics_queue.json     topic queue (persisted in repo for CI)
+logs/                 daily rotating logs (14-day retention)
+```
+
+---
+
+## Cost Estimate (per video, HuggingFace free tier)
 
 | Service | Cost |
-|---------|------|
-| Claude API (event + script gen) | ~$0.05–0.15 |
-| HuggingFace (image gen, free tier) | Free |
-| Edge TTS (voiceover) | Free |
+|---|---|
+| Claude API (event + script) | ~$0.01–0.03 |
+| HuggingFace (images, free tier) | Free |
+| Edge TTS (voice) | Free |
 | YouTube upload | Free |
-| **Total** | **~$0.05–0.15** |
+| **Total** | **~$0.01–0.03** |
 
-Using local A1111 or ComfyUI keeps image cost at $0.
+---
+
+## Built With Claude Code
+
+This project was built entirely using [Claude Code](https://claude.ai/claude-code):
+
+- **Agents** — Plan agents for architecture design, Explore agents for codebase analysis, and general-purpose agents for parallelising research across multiple files simultaneously
+- **Skills** — `/commit` for structured git commits, `claude-api` skill for Anthropic SDK patterns
+- **Multi-session memory** — persistent `MEMORY.md` tracking architecture decisions, tier completion status, and implementation patterns across all development sessions
