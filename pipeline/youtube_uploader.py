@@ -67,9 +67,13 @@ def _get_authenticated_service():
             creds = flow.run_local_server(port=0, open_browser=True)
             logger.info("[youtube_uploader] New OAuth token obtained via browser.")
 
-        # Save credentials for future runs
+        # Save credentials for future runs (owner read/write only)
         with open(creds_path, "w") as f:
             f.write(creds.to_json())
+        try:
+            os.chmod(creds_path, 0o600)
+        except Exception:
+            pass  # Windows does not support chmod — harmless
         logger.info(f"[youtube_uploader] Credentials saved to {creds_path}")
 
     service = build("youtube", "v3", credentials=creds)

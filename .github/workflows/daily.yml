@@ -104,6 +104,11 @@ jobs:
           retention-days: 7
           if-no-files-found: warn
 
+      # ── Clean up credential files ────────────────────────────────────────────
+      - name: Remove credential files from runner
+        if: always()
+        run: rm -f client_secrets.json credentials.json
+
       # ── Upload logs on failure ───────────────────────────────────────────────
       - name: Upload logs on failure
         if: failure()

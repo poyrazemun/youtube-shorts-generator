@@ -66,6 +66,10 @@ def _get_authenticated_service():
 
         with open(creds_path, "w") as f:
             f.write(creds.to_json())
+        try:
+            os.chmod(creds_path, 0o600)
+        except Exception:
+            pass  # Windows does not support chmod — harmless
 
     return build("youtube", "v3", credentials=creds)
 
