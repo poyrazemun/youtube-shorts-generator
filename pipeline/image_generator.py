@@ -1,0 +1,649 @@
+"""
+STEP 3 — IMAGE GENERATION (FREE/LOCAL)
+Priority: Automatic1111 → ComfyUI → Hugging Face (primary remote, needs token)
+          → Pollinations.AI (free fallback) → PIL placeholder (guaranteed offline)
+Generates 5 cinematic 9:16 images per event.
+Saves images to output/<slug>/images/<event_idx>/img_N.png
+"""
+
+import base64
+import json
+import logging
+import os
+import re
+import time
+import uuid
+import urllib.request
+import urllib.error
+from pathlib import Path
+
+import config
+from pipeline.retry import with_retry
+
+logger = logging.getLogger(__name__)
+
+
+# ── Backend Detection ─────────────────────────────────────────────────────────
+
+def _check_a1111() -> bool:
+    """Check if Automatic1111 WebUI API is running."""
+    try:
+        with urllib.request.urlopen(f"{config.A1111_URL}/sdapi/v1/sd-models", timeout=3) as resp:
+            return resp.status == 200
+    except Exception:
+        return False
+
+
+def _check_comfyui() -> bool:
+    """Check if ComfyUI API is running."""
+    try:
+        with urllib.request.urlopen(f"{config.COMFYUI_URL}/system_stats", timeout=3) as resp:
+            return resp.status == 200
+    except Exception:
+        return False
+
+
+def detect_backend() -> str:
+    """
+    Auto-detect which image generation backend to use as primary.
+    Priority: A1111 (local) → ComfyUI (local) → Hugging Face (if token set)
+              → Replicate (if token set) → Pollinations.AI (free, no key).
+    Per-image fallback chain in generate_images: primary → pollinations → pil.
+    """
+    if _check_a1111():
+        logger.info("[image_generator] Backend: Automatic1111 (local)")
+        return "a1111"
+    if _check_comfyui():
+        logger.info("[image_generator] Backend: ComfyUI (local)")
+        return "comfyui"
+    if os.getenv("HUGGINGFACE_API_TOKEN", ""):
+        logger.info("[image_generator] Backend: Hugging Face Inference API (FLUX.1-schnell)")
+        return "huggingface"
+    if config.REPLICATE_API_TOKEN:
+        logger.info("[image_generator] Backend: Replicate (remote, paid)")
+        return "replicate"
+    # Pollinations.AI: free, no key — used as primary if nothing else is configured
+    logger.info("[image_generator] Backend: Pollinations.AI (free, no API key required)")
+    return "pollinations"
+
+
+# ── Prompt Building ───────────────────────────────────────────────────────────
+
+def _build_image_prompts(script: dict) -> list[str]:
+    """Build 5 distinct image prompts for an event's visual sequence."""
+    event = script.get("source_event", {})
+    visual_theme = event.get("visual_theme", event.get("event", ""))
+    year = event.get("year", "historical")
+    location = event.get("location", "")
+
+    base_context = f"{visual_theme}, {year}, {location}"
+    style = config.IMAGE_STYLE_PROMPT
+
+    prompts = [
+        f"Wide establishing shot, {base_context}, {style}",
+        f"Close-up dramatic portrait of main subject, {base_context}, {style}",
+        f"Action scene at the height of the event, {base_context}, {style}",
+        f"Aftermath and consequence, {base_context}, moody {style}",
+        f"Historical artifact or symbolic detail, {base_context}, {style}",
+    ]
+    return prompts
+
+
+# ── Automatic1111 Backend ─────────────────────────────────────────────────────
+
+def _generate_a1111(prompt: str, out_path: Path) -> Path:
+    """Generate one image via A1111 txt2img API."""
+    import urllib.request
+    import json
+
+    payload = {
+        "prompt": prompt,
+        "negative_prompt": config.IMAGE_NEGATIVE_PROMPT,
+        "width": config.IMAGE_WIDTH,
+        "height": config.IMAGE_HEIGHT,
+        "steps": 25,
+        "cfg_scale": 7.5,
+        "sampler_name": "DPM++ 2M Karras",
+        "batch_size": 1,
+        "n_iter": 1,
+    }
+
+    data = json.dumps(payload).encode("utf-8")
+    req = urllib.request.Request(
+        f"{config.A1111_URL}/sdapi/v1/txt2img",
+        data=data,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+
+    try:
+        with urllib.request.urlopen(req, timeout=120) as resp:
+            result = json.loads(resp.read().decode("utf-8"))
+    except urllib.error.URLError as e:
+        raise RuntimeError(f"A1111 request failed: {e}")
+
+    images = result.get("images", [])
+    if not images:
+        raise RuntimeError("A1111 returned no images")
+
+    image_data = base64.b64decode(images[0])
+    out_path.write_bytes(image_data)
+    return out_path
+
+
+# ── ComfyUI Backend ───────────────────────────────────────────────────────────
+
+def _build_comfyui_workflow(prompt: str) -> dict:
+    """Build a minimal ComfyUI txt2img workflow."""
+    return {
+        "3": {
+            "class_type": "KSampler",
+            "inputs": {
+                "cfg": 7.5,
+                "denoise": 1.0,
+                "latent_image": ["5", 0],
+                "model": ["4", 0],
+                "negative": ["7", 0],
+                "positive": ["6", 0],
+                "sampler_name": "dpmpp_2m",
+                "scheduler": "karras",
+                "seed": int(time.time()) % 2147483647,
+                "steps": 25,
+            },
+        },
+        "4": {
+            "class_type": "CheckpointLoaderSimple",
+            "inputs": {"ckpt_name": "v1-5-pruned-emaonly.ckpt"},
+        },
+        "5": {
+            "class_type": "EmptyLatentImage",
+            "inputs": {
+                "batch_size": 1,
+                "height": config.IMAGE_HEIGHT,
+                "width": config.IMAGE_WIDTH,
+            },
+        },
+        "6": {
+            "class_type": "CLIPTextEncode",
+            "inputs": {"clip": ["4", 1], "text": prompt},
+        },
+        "7": {
+            "class_type": "CLIPTextEncode",
+            "inputs": {"clip": ["4", 1], "text": config.IMAGE_NEGATIVE_PROMPT},
+        },
+        "8": {
+            "class_type": "VAEDecode",
+            "inputs": {"samples": ["3", 0], "vae": ["4", 2]},
+        },
+        "9": {
+            "class_type": "SaveImage",
+            "inputs": {"filename_prefix": "unreal_history", "images": ["8", 0]},
+        },
+    }
+
+
+def _generate_comfyui(prompt: str, out_path: Path) -> Path:
+    """Generate one image via ComfyUI API."""
+    import urllib.request
+    import json
+
+    workflow = _build_comfyui_workflow(prompt)
+    client_id = str(uuid.uuid4())
+    payload = json.dumps({"prompt": workflow, "client_id": client_id}).encode("utf-8")
+
+    # Submit prompt
+    req = urllib.request.Request(
+        f"{config.COMFYUI_URL}/prompt",
+        data=payload,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            result = json.loads(resp.read().decode("utf-8"))
+    except urllib.error.URLError as e:
+        raise RuntimeError(f"ComfyUI submit failed: {e}")
+
+    prompt_id = result.get("prompt_id")
+    if not prompt_id:
+        raise RuntimeError(f"ComfyUI did not return prompt_id: {result}")
+
+    # Poll for completion
+    for _ in range(120):  # up to 2 minutes
+        time.sleep(1)
+        try:
+            with urllib.request.urlopen(
+                f"{config.COMFYUI_URL}/history/{prompt_id}", timeout=10
+            ) as resp:
+                history = json.loads(resp.read().decode("utf-8"))
+        except urllib.error.URLError:
+            continue
+
+        if prompt_id in history:
+            outputs = history[prompt_id].get("outputs", {})
+            for node_output in outputs.values():
+                images = node_output.get("images", [])
+                if images:
+                    img_info = images[0]
+                    img_url = (
+                        f"{config.COMFYUI_URL}/view"
+                        f"?filename={img_info['filename']}"
+                        f"&subfolder={img_info.get('subfolder', '')}"
+                        f"&type={img_info.get('type', 'output')}"
+                    )
+                    with urllib.request.urlopen(img_url, timeout=30) as img_resp:
+                        out_path.write_bytes(img_resp.read())
+                    return out_path
+            raise RuntimeError("ComfyUI finished but no images in output")
+
+    raise RuntimeError("ComfyUI timed out waiting for image generation")
+
+
+# ── Hugging Face Inference API Backend ───────────────────────────────────────
+
+HF_MODEL_URL = "https://router.huggingface.co/hf-inference/models/black-forest-labs/FLUX.1-schnell"
+
+
+@with_retry(max_retries=3, base_delay=2)
+def _generate_huggingface(prompt: str, out_path: Path) -> Path:
+    """
+    Generate one image via Hugging Face Inference API (FLUX.1-schnell).
+    Requires HUGGINGFACE_API_TOKEN in .env (free tier available).
+    POST {"inputs": prompt} → returns raw image bytes directly.
+    """
+    token = os.getenv("HUGGINGFACE_API_TOKEN", "")
+    if not token:
+        raise RuntimeError("HUGGINGFACE_API_TOKEN is not set in .env")
+
+    payload = json.dumps({
+        "inputs": prompt,
+        "parameters": {
+            "width": config.IMAGE_WIDTH,
+            "height": config.IMAGE_HEIGHT,
+        },
+    }).encode("utf-8")
+
+    req = urllib.request.Request(
+        HF_MODEL_URL,
+        data=payload,
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+
+    try:
+        with urllib.request.urlopen(req, timeout=120) as resp:
+            image_bytes = resp.read()
+    except urllib.error.HTTPError as e:
+        body = e.read().decode("utf-8", errors="replace")
+        raise RuntimeError(f"Hugging Face API error {e.code}: {body}")
+    except urllib.error.URLError as e:
+        raise RuntimeError(f"Hugging Face connection failed: {e}")
+
+    if len(image_bytes) < 1024:
+        raise RuntimeError(
+            f"Hugging Face returned suspiciously small response ({len(image_bytes)} bytes)"
+        )
+
+    out_path.write_bytes(image_bytes)
+    return out_path
+
+
+# ── Pollinations.AI Backend (truly free, no API key, no sign-up) ──────────────
+
+@with_retry(max_retries=3, base_delay=2)
+def _generate_pollinations(prompt: str, out_path: Path) -> Path:
+    """
+    Generate one image via Pollinations.AI — completely free, no API key needed.
+    API: GET https://image.pollinations.ai/prompt/{encoded_prompt}?width=W&height=H
+    Returns the image directly as JPEG/PNG bytes.
+    """
+    import urllib.parse
+
+    # Pollinations works best with concise prompts — trim to 400 chars
+    safe_prompt = prompt[:400]
+    encoded_prompt = urllib.parse.quote(safe_prompt, safe="")
+
+    seed = int(time.time() * 1000) % 2147483647
+    url = (
+        f"https://image.pollinations.ai/prompt/{encoded_prompt}"
+        f"?width={config.IMAGE_WIDTH}&height={config.IMAGE_HEIGHT}"
+        f"&nologo=true&seed={seed}&model=flux"
+    )
+
+    req = urllib.request.Request(url, headers={"User-Agent": "UnrealHistoryBot/1.0"})
+
+    try:
+        with urllib.request.urlopen(req, timeout=120) as resp:
+            image_bytes = resp.read()
+    except urllib.error.HTTPError as e:
+        raise RuntimeError(f"Pollinations.AI HTTP error {e.code}: {e.reason}")
+    except urllib.error.URLError as e:
+        raise RuntimeError(f"Pollinations.AI connection failed: {e}")
+
+    if len(image_bytes) < 1024:
+        raise RuntimeError(
+            f"Pollinations.AI returned suspiciously small response ({len(image_bytes)} bytes)"
+        )
+
+    out_path.write_bytes(image_bytes)
+    return out_path
+
+
+# ── Replicate Backend (direct REST API — no replicate package, no Pydantic) ───
+
+def _generate_replicate(prompt: str, out_path: Path) -> Path:
+    """
+    Generate one image via Replicate REST API using only urllib.
+    Avoids the replicate Python package (broken on Python 3.14 due to Pydantic v1).
+    API docs: https://replicate.com/docs/reference/http
+    """
+    # Extract model owner/name and version from the config string "owner/model:version"
+    model_ref = config.REPLICATE_IMAGE_MODEL
+    if ":" in model_ref:
+        model_id, version = model_ref.split(":", 1)
+    else:
+        model_id, version = model_ref, None
+
+    headers = {
+        "Authorization": f"Bearer {config.REPLICATE_API_TOKEN}",
+        "Content-Type": "application/json",
+        "Prefer": "wait=60",  # ask Replicate to wait up to 60s before returning
+    }
+
+    payload = {
+        "input": {
+            "prompt": prompt,
+            "negative_prompt": config.IMAGE_NEGATIVE_PROMPT,
+            "width": config.IMAGE_WIDTH,
+            "height": config.IMAGE_HEIGHT,
+            "num_inference_steps": 25,
+            "guidance_scale": 7.5,
+            "num_outputs": 1,
+        }
+    }
+    if version:
+        payload["version"] = version
+
+    data = json.dumps(payload).encode("utf-8")
+    api_url = "https://api.replicate.com/v1/predictions"
+    req = urllib.request.Request(api_url, data=data, headers=headers, method="POST")
+
+    try:
+        with urllib.request.urlopen(req, timeout=90) as resp:
+            prediction = json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        body = e.read().decode("utf-8", errors="replace")
+        raise RuntimeError(f"Replicate API error {e.code}: {body}")
+    except urllib.error.URLError as e:
+        raise RuntimeError(f"Replicate connection failed: {e}")
+
+    prediction_id = prediction.get("id")
+    if not prediction_id:
+        raise RuntimeError(f"Replicate returned no prediction ID: {prediction}")
+
+    # Poll until done (Prefer: wait=60 may have already resolved it)
+    for attempt in range(90):  # up to ~90 seconds of polling
+        status = prediction.get("status", "")
+
+        if status == "succeeded":
+            output = prediction.get("output", [])
+            if not output:
+                raise RuntimeError("Replicate succeeded but returned no output URLs")
+            img_url = str(output[0]) if isinstance(output, list) else str(output)
+            with urllib.request.urlopen(img_url, timeout=60) as img_resp:
+                out_path.write_bytes(img_resp.read())
+            return out_path
+
+        if status in ("failed", "canceled"):
+            error = prediction.get("error", "unknown error")
+            raise RuntimeError(f"Replicate prediction {status}: {error}")
+
+        # Not done yet — poll
+        time.sleep(1)
+        poll_url = f"https://api.replicate.com/v1/predictions/{prediction_id}"
+        poll_req = urllib.request.Request(
+            poll_url,
+            headers={"Authorization": f"Bearer {config.REPLICATE_API_TOKEN}"},
+            method="GET",
+        )
+        try:
+            with urllib.request.urlopen(poll_req, timeout=30) as poll_resp:
+                prediction = json.loads(poll_resp.read().decode("utf-8"))
+        except urllib.error.URLError as e:
+            logger.warning(f"[image_generator] Replicate poll attempt {attempt} failed: {e}")
+            continue
+
+    raise RuntimeError("Replicate timed out after 90 seconds")
+
+
+# ── PIL Placeholder Backend (guaranteed offline fallback) ─────────────────────
+
+def _load_font(size: int):
+    """Try to load a TrueType font; fall back to PIL's built-in bitmap font."""
+    from PIL import ImageFont
+    candidates = [
+        # Windows
+        "C:/Windows/Fonts/Georgia.ttf",
+        "C:/Windows/Fonts/Georgiab.ttf",
+        "C:/Windows/Fonts/Times New Roman.ttf",
+        "C:/Windows/Fonts/timesnewroman.ttf",
+        "C:/Windows/Fonts/Arial.ttf",
+        # macOS
+        "/System/Library/Fonts/Times.ttc",
+        "/Library/Fonts/Arial.ttf",
+        # Linux
+        "/usr/share/fonts/truetype/dejavu/DejaVuSerif.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSerif-Regular.ttf",
+    ]
+    for path in candidates:
+        try:
+            return ImageFont.truetype(path, size)
+        except (IOError, OSError):
+            continue
+    return ImageFont.load_default()
+
+
+def _wrap_text(text: str, font, max_width: int, draw) -> list[str]:
+    """Word-wrap text to fit within max_width pixels."""
+    words = text.split()
+    lines, current = [], []
+    for word in words:
+        test = " ".join(current + [word])
+        bbox = draw.textbbox((0, 0), test, font=font)
+        if bbox[2] - bbox[0] <= max_width:
+            current.append(word)
+        else:
+            if current:
+                lines.append(" ".join(current))
+            current = [word]
+    if current:
+        lines.append(" ".join(current))
+    return lines or [text[:30]]
+
+
+def _generate_pil(prompt: str, out_path: Path, script: dict | None = None) -> Path:
+    """
+    Generate a styled cinematic historical image using Pillow only.
+    No internet or API key required — the guaranteed offline fallback.
+    Produces a dark, atmospheric 9:16 portrait with event text overlay.
+    """
+    try:
+        from PIL import Image, ImageDraw, ImageFilter
+    except ImportError:
+        raise RuntimeError("Pillow not installed. Run: pip install Pillow")
+
+    import random
+
+    W, H = config.IMAGE_WIDTH, config.IMAGE_HEIGHT
+    rng = random.Random(hash(prompt) % 2 ** 32)
+
+    # ── Background gradient (dark charcoal → deep sepia) ──────────────────────
+    img = Image.new("RGB", (W, H))
+    draw = ImageDraw.Draw(img)
+    for y in range(H):
+        t = y / H
+        r = int(18 + t * 35)
+        g = int(12 + t * 18)
+        b = int(22 + t * 10)
+        draw.line([(0, y), (W, y)], fill=(r, g, b))
+
+    # ── Film grain ─────────────────────────────────────────────────────────────
+    for _ in range(W * H // 12):
+        x = rng.randint(0, W - 1)
+        y = rng.randint(0, H - 1)
+        v = rng.randint(0, 55)
+        draw.point((x, y), fill=(v, int(v * 0.85), int(v * 0.7)))
+
+    img = img.filter(ImageFilter.GaussianBlur(radius=0.4))
+
+    # ── Vignette (dark border) ─────────────────────────────────────────────────
+    vignette = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    vdraw = ImageDraw.Draw(vignette)
+    steps = 70
+    for i in range(steps):
+        alpha = int(210 * ((1 - i / steps) ** 2))
+        vdraw.rectangle([i, i, W - i - 1, H - i - 1], outline=(0, 0, 0, alpha))
+    img = Image.alpha_composite(img.convert("RGBA"), vignette).convert("RGB")
+    draw = ImageDraw.Draw(img)
+
+    # ── Decorative gold lines ─────────────────────────────────────────────────
+    gold = (190, 148, 65)
+    dim_gold = (120, 92, 38)
+    margin = 38
+    draw.line([(margin, 90), (W - margin, 90)], fill=gold, width=2)
+    draw.line([(margin, 94), (W - margin, 94)], fill=dim_gold, width=1)
+    draw.line([(margin, H - 90), (W - margin, H - 90)], fill=dim_gold, width=1)
+    draw.line([(margin, H - 94), (W - margin, H - 94)], fill=gold, width=2)
+
+    # ── Fonts ──────────────────────────────────────────────────────────────────
+    font_header = _load_font(28)
+    font_body = _load_font(42)
+    font_meta = _load_font(26)
+
+    # ── "UNREAL HISTORY" header ────────────────────────────────────────────────
+    header_text = "UNREAL HISTORY"
+    draw.text((W // 2 + 1, 57), header_text, font=font_header, fill=(0, 0, 0), anchor="mm")
+    draw.text((W // 2, 56), header_text, font=font_header, fill=gold, anchor="mm")
+
+    # ── Event text (extract readable portion from prompt) ─────────────────────
+    # The prompt starts with a scene description before the first comma
+    readable = prompt.split(",")[0].strip()
+    # Remove leading scene type labels ("Wide establishing shot, " etc.)
+    for prefix in ("Wide establishing shot", "Close-up dramatic portrait of main subject",
+                   "Action scene at the height of the event",
+                   "Aftermath and consequence", "Historical artifact or symbolic detail"):
+        if readable.lower().startswith(prefix.lower()):
+            readable = readable[len(prefix):].lstrip(" -—,").strip()
+
+    lines = _wrap_text(readable, font_body, W - 80, draw)
+    line_height = 56
+    total_text_h = len(lines) * line_height
+    start_y = (H - total_text_h) // 2
+
+    for i, line in enumerate(lines):
+        y = start_y + i * line_height
+        # Drop shadow
+        draw.text((W // 2 + 2, y + 2), line, font=font_body, fill=(0, 0, 0), anchor="mm")
+        draw.text((W // 2, y), line, font=font_body, fill=(238, 225, 195), anchor="mm")
+
+    # ── Event metadata from script ─────────────────────────────────────────────
+    if script:
+        event = script.get("source_event", {})
+        year = event.get("year", "")
+        location = event.get("location", "")
+        meta = "  |  ".join(filter(None, [year, location]))
+        if meta:
+            draw.text((W // 2 + 1, H - 56 + 1), meta, font=font_meta, fill=(0, 0, 0), anchor="mm")
+            draw.text((W // 2, H - 56), meta, font=font_meta, fill=gold, anchor="mm")
+
+    img.save(str(out_path), "PNG")
+    return out_path
+
+
+# ── Main Entry Point ──────────────────────────────────────────────────────────
+
+def generate_images(scripts: list[dict], slug: str) -> list[list[Path]]:
+    """
+    Generate 5 images per script/event.
+    Returns list of lists: [[img0, img1, ...], [img0, img1, ...], ...]
+    Resumable — skips already-generated images.
+    """
+    backend = detect_backend()
+    all_image_paths = []
+
+    for script in scripts:
+        idx = script.get("event_index", scripts.index(script))
+        img_dir = config.OUTPUT_DIR / slug / "images" / str(idx)
+        img_dir.mkdir(parents=True, exist_ok=True)
+
+        prompts = _build_image_prompts(script)
+        event_images = []
+
+        logger.info(
+            f"[image_generator] Generating {config.IMAGES_PER_EVENT} images "
+            f"for event {idx} using {backend}..."
+        )
+
+        for img_idx, prompt in enumerate(prompts):
+            out_path = img_dir / f"img_{img_idx}.png"
+
+            if out_path.exists() and out_path.stat().st_size > 1024:
+                logger.info(f"[image_generator] Cache hit: {out_path.name}")
+                event_images.append(out_path)
+                continue
+
+            logger.info(f"[image_generator] Generating image {img_idx + 1}/{config.IMAGES_PER_EVENT}...")
+
+            generated = False
+            last_error = None
+
+            # Build fallback chain: primary → pollinations → pil (guaranteed)
+            backends_to_try = [backend] if backend != "pil" else []
+            if "pollinations" not in backends_to_try:
+                backends_to_try.append("pollinations")
+            backends_to_try.append("pil")
+
+            for attempt_backend in backends_to_try:
+                try:
+                    if attempt_backend == "a1111":
+                        _generate_a1111(prompt, out_path)
+                    elif attempt_backend == "comfyui":
+                        _generate_comfyui(prompt, out_path)
+                    elif attempt_backend == "huggingface":
+                        _generate_huggingface(prompt, out_path)
+                    elif attempt_backend == "pollinations":
+                        _generate_pollinations(prompt, out_path)
+                    elif attempt_backend == "replicate":
+                        _generate_replicate(prompt, out_path)
+                    elif attempt_backend == "pil":
+                        _generate_pil(prompt, out_path, script)
+
+                    logger.info(f"[image_generator] Saved: {out_path} (via {attempt_backend})")
+                    generated = True
+                    break
+
+                except Exception as e:
+                    last_error = e
+                    next_backends = backends_to_try[backends_to_try.index(attempt_backend) + 1:]
+                    if next_backends:
+                        logger.warning(
+                            f"[image_generator] {attempt_backend} failed for image {img_idx}: {e} "
+                            f"— trying {next_backends[0]}"
+                        )
+                    else:
+                        logger.error(f"[image_generator] PIL fallback also failed: {e}")
+
+            if not generated:
+                raise RuntimeError(
+                    f"All image backends failed for image {img_idx}. Last error: {last_error}"
+                )
+
+            event_images.append(out_path)
+
+        all_image_paths.append(event_images)
+        logger.info(f"[image_generator] Event {idx} images complete: {len(event_images)} images")
+
+    return all_image_paths

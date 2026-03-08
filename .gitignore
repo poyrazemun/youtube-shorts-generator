@@ -1,0 +1,58 @@
+# ── Secrets & credentials ─────────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+client_secrets.json
+credentials.json
+token.json
+token*.json
+*_secret*.json
+*.pem
+*.key
+*.p12
+*.pfx
+
+# ── Pipeline output ───────────────────────────────────────────────────────────
+output/
+logs/
+*.log
+
+# ── Assets (user-supplied, not tracked) ───────────────────────────────────────
+assets/music/
+assets/images/
+assets/audio/
+assets/video/
+
+# ── Python ────────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# ── Virtual environments ───────────────────────────────────────────────────────
+.venv/
+venv/
+env/
+ENV/
+
+# ── Whisper model cache ───────────────────────────────────────────────────────
+# Whisper downloads models to ~/.cache/whisper — nothing to ignore here,
+# but if you ever cache locally:
+*.pt
+
+# ── OS junk ───────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── IDE ───────────────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.suo
+*.user
+.claude/*

@@ -1,0 +1,26 @@
+# ── Core ──────────────────────────────────────────────────────────────────────
+anthropic>=0.40.0
+python-dotenv>=1.0.0
+
+# ── Image Generation (Replicate fallback — uses REST API directly, no package needed)
+# No extra package required for Replicate; calls are made via urllib.
+
+# ── TTS (Edge TTS is the free fallback — Microsoft Neural voices, no API key) ──
+edge-tts>=6.1.0
+# Optional local TTS (install separately if desired):
+#   Coqui TTS:  pip install TTS
+#   Piper:      download binary from https://github.com/rhasspy/piper/releases
+
+# ── Image Generation (PIL offline fallback) ───────────────────────────────────
+Pillow>=10.0.0
+
+# ── Video Assembly ────────────────────────────────────────────────────────────
+# ffmpeg must be installed on system PATH:
+#   Windows:  winget install ffmpeg
+#   macOS:    brew install ffmpeg
+#   Linux:    apt install ffmpeg
+
+# ── YouTube Upload ────────────────────────────────────────────────────────────
+google-api-python-client>=2.100.0
+google-auth-httplib2>=0.2.0
+google-auth-oauthlib>=1.1.0

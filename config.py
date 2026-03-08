@@ -1,0 +1,85 @@
+"""
+Central configuration for Unreal History Bot.
+All paths, API settings, and pipeline constants live here.
+"""
+
+import os
+from pathlib import Path
+from dotenv import load_dotenv
+
+load_dotenv()
+
+# ── Base Paths ────────────────────────────────────────────────────────────────
+BASE_DIR = Path(__file__).parent
+OUTPUT_DIR = BASE_DIR / "output"
+ASSETS_DIR = BASE_DIR / "assets"
+LOGS_DIR = BASE_DIR / "logs"
+MUSIC_DIR = ASSETS_DIR / "music"
+
+for _d in [OUTPUT_DIR, ASSETS_DIR / "images", ASSETS_DIR / "audio",
+           ASSETS_DIR / "video", LOGS_DIR, MUSIC_DIR]:
+    _d.mkdir(parents=True, exist_ok=True)
+
+# ── API Keys ──────────────────────────────────────────────────────────────────
+ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
+REPLICATE_API_TOKEN = os.getenv("REPLICATE_API_TOKEN", "")
+YOUTUBE_CLIENT_SECRETS_FILE = os.getenv(
+    "YOUTUBE_CLIENT_SECRETS_FILE", str(BASE_DIR / "client_secrets.json")
+)
+YOUTUBE_CREDENTIALS_FILE = str(BASE_DIR / "credentials.json")
+
+# ── Claude Settings ───────────────────────────────────────────────────────────
+CLAUDE_MODEL = "claude-sonnet-4-6"
+CLAUDE_MAX_TOKENS = 4096
+
+# ── Image Generation ──────────────────────────────────────────────────────────
+A1111_URL = os.getenv("A1111_URL", "http://127.0.0.1:7860")
+COMFYUI_URL = os.getenv("COMFYUI_URL", "http://127.0.0.1:8188")
+IMAGES_PER_EVENT = 5
+IMAGE_WIDTH = 608    # 9:16 friendly width for SD (multiple of 64)
+IMAGE_HEIGHT = 1080  # 9:16 friendly height for SD (multiple of 64)
+# Final video resolution
+VIDEO_WIDTH = 1080
+VIDEO_HEIGHT = 1920
+
+IMAGE_STYLE_PROMPT = (
+    "cinematic historical photograph, dramatic lighting, epic composition, "
+    "9:16 vertical portrait, ultra detailed, photorealistic, dark moody atmosphere, "
+    "documentary style, award winning photography"
+)
+IMAGE_NEGATIVE_PROMPT = (
+    "text, watermark, logo, modern, cartoon, anime, ugly, blurry, "
+    "low quality, deformed, extra limbs"
+)
+
+# Replicate model for image generation (free credits available)
+REPLICATE_IMAGE_MODEL = "stability-ai/stable-diffusion:db21e45d3f7023abc2a46ee38a23973f6dce16bb082a930b0c49861f96d1e5bf"
+
+# ── TTS Settings ──────────────────────────────────────────────────────────────
+PIPER_MODEL = os.getenv("PIPER_MODEL", "en_US-lessac-medium")
+PIPER_BINARY = os.getenv("PIPER_BINARY", "piper")  # must be on PATH
+
+# ── Video Assembly ────────────────────────────────────────────────────────────
+SECONDS_PER_IMAGE = 5          # base duration per image slide
+TARGET_DURATION_MIN = 20       # minimum short duration in seconds
+TARGET_DURATION_MAX = 30       # maximum short duration in seconds
+FONT_SIZE = 48
+FONT_COLOR = "white"
+SUBTITLE_OUTLINE_COLOR = "black"
+SUBTITLE_OUTLINE_WIDTH = 3
+
+# ── YouTube ───────────────────────────────────────────────────────────────────
+YOUTUBE_CATEGORY_ID = "27"     # Education
+YOUTUBE_PRIVACY = os.getenv("YOUTUBE_PRIVACY", "private")  # start private for safety
+YOUTUBE_SCOPES = [
+    "https://www.googleapis.com/auth/youtube.upload",
+    "https://www.googleapis.com/auth/youtube.readonly",
+]
+
+# ── Logging ───────────────────────────────────────────────────────────────────
+LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
+LOG_FILE = LOGS_DIR / "pipeline.log"
+
+# ── Tier 3: Automation ────────────────────────────────────────────────────────
+TOPICS_QUEUE_PATH = BASE_DIR / "topics_queue.json"
+ANALYTICS_PATH    = OUTPUT_DIR / "analytics.json"
