@@ -382,7 +382,7 @@ Examples:
             run_pipeline(
                 topic=entry["topic"],
                 keyword=entry["keyword"],
-                count=entry["count"],
+                count=1,
                 skip_upload=args.no_upload,
                 verbose=args.verbose,
             )
