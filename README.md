@@ -4,7 +4,7 @@ A fully automated YouTube Shorts pipeline that discovers strange real historical
 
 Built entirely with **[Claude Code](https://claude.ai/claude-code)**, using its agent and skill system for architecture planning, codebase exploration, and iterative implementation across multiple sessions.
 
-**Live output:** [youtube.com/@ThatActuallyHappened11](https://www.youtube.com/@ThatActuallyHappened11)
+
 
 ---
 
