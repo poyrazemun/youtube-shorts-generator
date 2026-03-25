@@ -1,6 +1,6 @@
 """
 STEP 4 — VOICE GENERATION (FREE/LOCAL)
-Priority: Piper TTS → Coqui TTS → Edge TTS (Microsoft Neural, free fallback)
+Priority: Piper TTS → Coqui TTS → Edge TTS (Microsoft Neural, default)
 Generates WAV audio from script text.
 Saves to output/<slug>/audio/<event_idx>.wav
 """
@@ -8,7 +8,6 @@ Saves to output/<slug>/audio/<event_idx>.wav
 import logging
 import shutil
 import subprocess
-import tempfile
 from pathlib import Path
 
 import config
@@ -41,7 +40,7 @@ def detect_tts_backend() -> str:
     if _check_coqui():
         logger.info("[tts_generator] TTS Backend: Coqui TTS (local Python)")
         return "coqui"
-    logger.info("[tts_generator] TTS Backend: Edge TTS (Microsoft Neural, free)")
+    logger.info("[tts_generator] TTS Backend: Edge TTS (en-US-ChristopherNeural)")
     return "edge_tts"
 
 

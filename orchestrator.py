@@ -235,6 +235,8 @@ def run_pipeline(topic: str, keyword: str, count: int, skip_upload: bool = False
             scripts=scripts,
             slug=slug,
             thumbnail_paths=thumbnail_paths,
+            topic=topic,
+            keyword=keyword,
         )
         logger.info(f"Step 6 complete: {len(upload_results)} videos uploaded.")
         for r in upload_results:
@@ -263,6 +265,7 @@ Examples:
   python orchestrator.py --topic "Unbelievable Events" --keyword "plague" --count 3 --no-upload
   python orchestrator.py --auto
   python orchestrator.py --refresh-topics
+  python orchestrator.py --list-topics
   python orchestrator.py --analytics
         """,
     )
@@ -284,6 +287,12 @@ Examples:
         "--analytics",
         action="store_true",
         help="Fetch YouTube analytics and print performance summary, then exit",
+    )
+    mode_group.add_argument(
+        "--list-topics",
+        action="store_true",
+        dest="list_topics",
+        help="Print the current topic queue and exit",
     )
 
     # ── Manual mode args (required when not using --auto/--refresh-topics/--analytics) ──
@@ -317,7 +326,7 @@ Examples:
     args = parser.parse_args()
 
     # ── Validate: manual mode requires --topic and --keyword ──────────────────
-    is_auto_mode = args.auto or args.refresh_topics or args.analytics
+    is_auto_mode = args.auto or args.refresh_topics or args.analytics or args.list_topics
     if not is_auto_mode:
         if not args.topic or not args.keyword:
             parser.error(
@@ -337,15 +346,30 @@ Examples:
     if args.analytics:
         from pipeline import analytics as analytics_mod
         result = analytics_mod.fetch_analytics()
-        hints = analytics_mod.get_performance_hints()
+        videos = result.get("videos", [])
         print("\n" + "═" * 60)
         print("   YOUTUBE ANALYTICS")
         print("═" * 60)
-        print(f"  Videos analyzed: {result['total_videos']}")
-        if hints:
-            print(f"\n  {hints}")
+        print(f"  Total videos on channel: {result['total_videos']}")
+        if videos:
+            print()
+            print("  VIDEOS (sorted by views):")
+            print("  " + "─" * 56)
+            for v in sorted(videos, key=lambda x: x.get("view_count", 0), reverse=True):
+                views = v.get("view_count", 0)
+                likes = v.get("like_count", 0)
+                title = v.get("title") or v.get("topic") or v.get("video_id")
+                kw = v.get("keyword", "")
+                kw_tag = f"  [{kw}]" if kw and kw != "unknown" else ""
+                print(f"  {views:>6} views  {likes:>4} likes  {title}{kw_tag}")
+            top_kw = result.get("top_keywords", [])
+            if top_kw:
+                print()
+                print("  TOP KEYWORDS:")
+                for k in top_kw:
+                    print(f"    {k['keyword']:20s}  {k['avg_views']:,} avg views  ({k['video_count']} video{'s' if k['video_count'] != 1 else ''})")
         else:
-            print("  No videos uploaded yet.")
+            print("  No videos found on channel.")
         print()
         sys.exit(0)
 
@@ -360,7 +384,48 @@ Examples:
         added = topic_discovery.refresh_queue(performance_hints=hints)
         queue = topic_discovery.load_queue()
         pending = sum(1 for t in queue["topics"] if t["status"] == "pending")
-        print(f"\n  Topic queue refreshed: {added} new entries added. {pending} pending total.\n")
+        print(f"\n  Topic queue replaced: {added} new topics. {pending} pending total.\n")
+        print("  " + "─" * 56)
+        for i, t in enumerate(queue["topics"], 1):
+            status_tag = f"[{t['status']}]" if t["status"] != "pending" else ""
+            print(f"  {i:>2}. {t['topic']} ({t['keyword']}) {status_tag}".rstrip())
+        print()
+        sys.exit(0)
+
+    elif args.list_topics:
+        from pipeline import topic_discovery
+        queue = topic_discovery.load_queue()
+        topics = queue.get("topics", [])
+        pending   = [t for t in topics if t["status"] == "pending"]
+        done      = [t for t in topics if t["status"] == "done"]
+        failed    = [t for t in topics if t["status"] == "failed"]
+        in_prog   = [t for t in topics if t["status"] == "in_progress"]
+        print("\n" + "═" * 60)
+        print("   TOPIC QUEUE")
+        print("═" * 60)
+        print(f"  Generated : {queue.get('generated_at', 'unknown')}")
+        print(f"  Pending   : {len(pending)}  |  In-progress: {len(in_prog)}  |  Done: {len(done)}  |  Failed: {len(failed)}")
+        if pending or in_prog:
+            print()
+            print("  PENDING / IN-PROGRESS:")
+            print("  " + "─" * 56)
+            for i, t in enumerate(pending + in_prog, 1):
+                status_tag = "[in_progress]" if t["status"] == "in_progress" else ""
+                score = t.get("virality_score", "?")
+                print(f"  {i:>2}. [{score}/10] {t['topic']} ({t['keyword']}) {status_tag}".rstrip())
+        if done:
+            print()
+            print("  DONE:")
+            print("  " + "─" * 56)
+            for t in done:
+                print(f"      ✓ {t['topic']} ({t['keyword']})")
+        if failed:
+            print()
+            print("  FAILED:")
+            print("  " + "─" * 56)
+            for t in failed:
+                print(f"      ✗ {t['topic']} ({t['keyword']})")
+        print()
         sys.exit(0)
 
     elif args.auto:

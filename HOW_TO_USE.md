@@ -8,13 +8,13 @@ Automated YouTube Shorts pipeline. Generates and uploads short videos about stra
 
 ### 1. Install dependencies
 ```bash
-pip install anthropic python-dotenv edge-tts Pillow google-api-python-client google-auth-oauthlib google-auth-httplib2
+pip install -r requirements.txt
 ```
 
 ### 2. Create your `.env` file in the project root
 ```env
 ANTHROPIC_API_KEY=sk-ant-...
-HUGGINGFACE_API_TOKEN=hf_...        # optional — for better images
+REPLICATE_API_TOKEN=r8_...          # for image generation (~$0.003/image)
 YOUTUBE_PRIVACY=private             # start private, change to public when ready
 LOG_LEVEL=INFO
 ```
@@ -36,17 +36,32 @@ Download from https://ffmpeg.org/download.html and make sure `ffmpeg` is on your
 ```bash
 python orchestrator.py --refresh-topics
 ```
-Claude generates 25 topic+keyword combos and saves them to `topics_queue.json`.
+Claude generates 25 topic+keyword combos, scores each on viral potential (1–10), discards anything scoring below 7, and saves the rest sorted best-first to `topics_queue.json`.
+
+Old pending topics are discarded and replaced with fresh ones. Keywords from already-uploaded videos (tracked in `video_registry.json`) are automatically excluded — Claude is told to avoid them, and any that slip through are filtered out, so you never get duplicate topics.
+
+Stale `in_progress` entries (from crashed or interrupted runs older than 2 hours) are automatically reset to `failed` during refresh.
+
 **First time this runs, a browser opens for YouTube OAuth consent** — click Allow.
 
-### Step 2 — Run the pipeline (one batch per run)
+### Step 2 — View the queue (optional)
+```bash
+python orchestrator.py --list-topics
+```
+Shows all topics grouped by status with virality scores:
+```
+  1. [10/10] The Radium Girls — workers ordered to lick radioactive paintbrushes (radium)
+  2. [9/10]  Napoleon Routed by Rabbits at His Own Victory Hunt (napoleon)
+  3. [8/10]  The Man Who Accidentally Started WWI (assassination)
+```
+
+### Step 3 — Run the pipeline (one video per run)
 ```bash
 python orchestrator.py --auto
 ```
-Picks the next topic from the queue, runs all 6 pipeline steps, uploads to YouTube.
-Each run produces 1 video by default.
+Picks the highest-scoring pending topic, runs all 6 pipeline steps, uploads to YouTube.
 
-### Step 3 — Check your analytics (after videos get views)
+### Step 4 — Check your analytics (after videos get views)
 ```bash
 python orchestrator.py --analytics
 ```
@@ -62,11 +77,8 @@ so it generates more topics like your best performers.
 # Test the pipeline without uploading to YouTube
 python orchestrator.py --auto --no-upload
 
-# Manual mode — specify topic and keyword yourself (1 video by default)
-python orchestrator.py --topic "Strange War Stories" --keyword "battle"
-
-# Manual mode with multiple videos
-python orchestrator.py --topic "Strange War Stories" --keyword "battle" --count 3
+# Manual mode — specify topic and keyword yourself
+python orchestrator.py --topic "The Radium Girls" --keyword "radium"
 
 # Manual mode without upload
 python orchestrator.py --topic "Weird Science" --keyword "invention" --no-upload
@@ -99,22 +111,32 @@ To run daily without touching your PC:
    ```
    python C:\path\to\unreal-history-bot\orchestrator.py --auto
    ```
-4. Add a **weekly** task for `--refresh-topics` to keep the topic queue fresh with new ideas
+4. Add a **weekly** task for `--refresh-topics` to keep the topic queue fresh
 
 ---
 
 ## Pipeline Steps (what happens when you run --auto)
 
-| Step | Name              | What it does                                      |
-|------|-------------------|---------------------------------------------------|
-| 1    | Event Discovery   | Claude finds 1 strange real historical event      |
-| 2    | Script Generation | Claude writes a viral 20–30 second script per event |
-| 3    | Image Generation  | AI generates 5 cinematic images per event         |
-| 4    | Voice Generation  | Text-to-speech narration (Edge TTS)               |
-| 5    | Video Assembly    | ffmpeg combines images + audio + captions         |
-| 6    | YouTube Upload    | Uploads video + thumbnail to your channel         |
+| Step | Name              | What it does                                                    |
+|------|-------------------|-----------------------------------------------------------------|
+| 1    | Event Discovery   | Claude finds 1 strange real historical event                    |
+| 2    | Script Generation | Claude writes a viral 20–30s script using one of 5 hook formulas |
+| 3    | Image Generation  | Replicate FLUX.1-schnell generates 5 cinematic 9:16 images      |
+| 4    | Voice Generation  | Edge TTS (en-US-ChristopherNeural) narration                    |
+| 5a   | Captions          | Whisper word timestamps or estimation-based SRT                 |
+| 5b   | Video Assembly    | ffmpeg: images + audio + captions + "Follow @ThatActuallyHappened11" overlay |
+| 6    | YouTube Upload    | Uploads video + thumbnail to your channel                       |
 
 All steps are **resumable** — if a step fails, re-run the same command and it continues from where it stopped.
+
+---
+
+## What Every Video Includes
+
+- **Hook formula**: One of 5 proven formulas (Shocking Fact, False Assumption, Consequence First, Specific Number, Direct Address) chosen by Claude for maximum scroll-stopping power
+- **Subtitles**: Burned in, white bold text with dark background box, positioned above the YouTube Shorts phone UI
+- **CTA overlay**: "Follow @ThatActuallyHappened11" — white text, top-center, visible in the last 3 seconds of every video
+- **Background music**: Mixed at low volume if `.mp3` files are present in `assets/music/`
 
 ---
 
@@ -124,7 +146,7 @@ All steps are **resumable** — if a step fails, re-run the same command and it 
 output/
   <slug>/
     events.json       ← discovered historical events
-    scripts.json      ← generated video scripts
+    scripts.json      ← generated video scripts (includes hook_type field)
     images/           ← AI-generated images per event
     audio/            ← TTS narration audio
     subtitles/        ← captions (.ass + .srt)
@@ -132,8 +154,10 @@ output/
     thumbnails/       ← YouTube thumbnails (1280x720)
     uploads.json      ← upload results with YouTube video URLs
 
-topics_queue.json     ← topic queue (generated by --refresh-topics)
+topics_queue.json     ← topic queue with virality scores (generated by --refresh-topics)
+video_registry.json   ← persistent record of all uploaded videos
 logs/                 ← daily rotating log files (kept 14 days)
+growth/               ← marketing guides (Reddit strategy)
 ```
 
 ---
@@ -146,5 +170,9 @@ logs/                 ← daily rotating log files (kept 14 days)
 | `YouTube client secrets not found` | Download `client_secrets.json` from Google Cloud Console |
 | `ffmpeg not found` | Install ffmpeg and add it to your system PATH |
 | Topic queue exhausted | Run `python orchestrator.py --refresh-topics` |
-| Video uploaded but no thumbnail | Verify `HUGGINGFACE_API_TOKEN` in `.env` (Pillow fallback still works without it) |
+| Duplicate video generated | Already fixed — `--refresh-topics` now excludes keywords from `video_registry.json` |
+| Topics stuck as `in_progress` | Automatically reset after 2 hours on next `--refresh-topics` |
+| Images failing to generate | Check `REPLICATE_API_TOKEN` in `.env` — PIL placeholder used as fallback |
 | Step fails mid-pipeline | Just re-run — completed steps are cached and skipped |
+| CTA overlay missing or clipped | Check ffmpeg version supports drawtext filter (`ffmpeg -filters \| grep drawtext`) |
+| Script cached with old format | Delete `output/<slug>/scripts.json` and re-run to regenerate |

@@ -20,6 +20,35 @@ from pipeline.tts_generator import get_audio_duration
 
 logger = logging.getLogger(__name__)
 
+CTA_OVERLAY_TEXT = "Follow @ThatActuallyHappened11"
+CTA_DURATION_SECS = 3.0  # show in last 3 seconds of video
+
+
+def _build_cta_drawtext(audio_duration: float) -> str:
+    """Return an ffmpeg drawtext filter string for the subscribe CTA overlay."""
+    H = config.VIDEO_HEIGHT  # 1920
+    font_size = int(H * 0.026)          # ~50px — fits "Follow @ThatActuallyHappened11" within 1080px
+    box_pad = int(font_size * 0.4)      # padding inside background box
+    start_time = max(0.0, audio_duration - CTA_DURATION_SECS)
+    safe_text = (
+        CTA_OVERLAY_TEXT
+        .replace("\\", "\\\\")
+        .replace("'", "\\'")
+        .replace(":", "\\:")
+    )
+    return (
+        f"drawtext=text='{safe_text}':"
+        f"fontsize={font_size}:"
+        f"fontcolor=white:"
+        f"x=(w-text_w)/2:"
+        f"y=h*0.05:"
+        f"box=1:"
+        f"boxcolor=black@0.65:"
+        f"boxborderw={box_pad}:"
+        f"fix_bounds=1:"
+        f"enable='gte(t,{start_time:.2f})'"
+    )
+
 
 def _build_slideshow_filter(image_paths: list[Path], audio_duration: float) -> tuple[str, list]:
     """
@@ -75,7 +104,7 @@ def _convert_srt_to_ass(srt_path: Path, ass_path: Path) -> Path:
     H = config.VIDEO_HEIGHT   # 1920
 
     font_size  = int(H * 0.032)   # ~61px  — clear on mobile, ≤ 7% of height per line
-    margin_v   = int(H * 0.09)    # ~173px from bottom edge
+    margin_v   = int(H * 0.35)    # ~672px from bottom — above YouTube Shorts UI on phones
     margin_lr  = int(W * 0.05)    # ~54px horizontal padding
     box_pad    = int(font_size * 0.35)  # ~21px padding inside the background box
 
@@ -258,14 +287,17 @@ def assemble_video(
             except Exception as e:
                 logger.warning(f"[video_assembler] SRT→ASS conversion failed: {e} — skipping subs")
 
+        cta_filter = _build_cta_drawtext(audio_duration)
+
         if tmp_ass and tmp_ass.exists():
             # Escape path for ffmpeg filter (Windows: backslashes→slashes, colon→\:)
             ass_escaped = str(tmp_ass).replace("\\", "/").replace(":", "\\:")
+            vf_filter = f"ass='{ass_escaped}',{cta_filter}"
 
             cmd_pass2 = [
                 "ffmpeg", "-y",
                 "-i", str(tmp_nosub),
-                "-vf", f"ass='{ass_escaped}'",
+                "-vf", vf_filter,
                 "-c:v", "libx264",
                 "-preset", "fast",
                 "-crf", "23",
@@ -279,15 +311,48 @@ def assemble_video(
             if result2.returncode != 0:
                 stderr2 = result2.stderr.decode("utf-8", errors="replace")
                 logger.warning(
-                    f"[video_assembler] Subtitle burn failed — copying video without subtitles.\n"
+                    f"[video_assembler] Subtitle burn failed — falling back to CTA-only pass.\n"
+                    f"Error: {stderr2[-500:]}"
+                )
+                # Fallback: burn CTA overlay only (no subtitles)
+                cmd_cta_only = [
+                    "ffmpeg", "-y",
+                    "-i", str(tmp_nosub),
+                    "-vf", cta_filter,
+                    "-c:v", "libx264",
+                    "-preset", "fast",
+                    "-crf", "23",
+                    "-c:a", "copy",
+                    str(out_path),
+                ]
+                result_cta = subprocess.run(cmd_cta_only, capture_output=True, timeout=300)
+                if result_cta.returncode != 0:
+                    import shutil
+                    shutil.copy2(tmp_nosub, out_path)
+        else:
+            # No subtitles — burn CTA overlay only
+            cmd_pass2 = [
+                "ffmpeg", "-y",
+                "-i", str(tmp_nosub),
+                "-vf", cta_filter,
+                "-c:v", "libx264",
+                "-preset", "fast",
+                "-crf", "23",
+                "-c:a", "copy",
+                str(out_path),
+            ]
+
+            logger.debug(f"[video_assembler] Pass 2 (CTA only) cmd: {' '.join(cmd_pass2)}")
+
+            result2 = subprocess.run(cmd_pass2, capture_output=True, timeout=300)
+            if result2.returncode != 0:
+                stderr2 = result2.stderr.decode("utf-8", errors="replace")
+                logger.warning(
+                    f"[video_assembler] CTA overlay failed — copying video without overlay.\n"
                     f"Error: {stderr2[-500:]}"
                 )
                 import shutil
                 shutil.copy2(tmp_nosub, out_path)
-        else:
-            # No subtitles — just copy pass 1 output
-            import shutil
-            shutil.copy2(tmp_nosub, out_path)
 
     final_duration = get_audio_duration(out_path)
     logger.info(

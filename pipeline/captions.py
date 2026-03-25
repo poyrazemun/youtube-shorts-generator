@@ -41,7 +41,7 @@ def _seconds_to_ass_ts(s: float) -> str:
 
 def _build_ass_header(W: int, H: int) -> str:
     font_size = int(H * 0.032)
-    margin_v = int(H * 0.09)
+    margin_v = int(H * 0.35)    # ~672px from bottom — above YouTube Shorts UI on phones
     margin_lr = int(W * 0.05)
     box_pad = int(font_size * 0.35)
     return (

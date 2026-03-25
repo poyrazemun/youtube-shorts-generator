@@ -49,11 +49,14 @@ IMAGE_STYLE_PROMPT = (
 )
 IMAGE_NEGATIVE_PROMPT = (
     "text, watermark, logo, modern, cartoon, anime, ugly, blurry, "
-    "low quality, deformed, extra limbs"
+    "low quality, deformed, extra limbs, "
+    "blood, gore, graphic wounds, open wounds, corpses, dead bodies, "
+    "execution scene, graphic violence, disturbing imagery, graphic suffering, mutilation"
 )
 
-# Replicate model for image generation (free credits available)
-REPLICATE_IMAGE_MODEL = "stability-ai/stable-diffusion:db21e45d3f7023abc2a46ee38a23973f6dce16bb082a930b0c49861f96d1e5bf"
+# Replicate model for image generation
+# FLUX.1-schnell: fast, high quality, same cost as SD (~$0.003/image)
+REPLICATE_IMAGE_MODEL = "black-forest-labs/flux-schnell"
 
 # ── TTS Settings ──────────────────────────────────────────────────────────────
 PIPER_MODEL = os.getenv("PIPER_MODEL", "en_US-lessac-medium")
@@ -74,6 +77,7 @@ YOUTUBE_PRIVACY = os.getenv("YOUTUBE_PRIVACY", "private")  # start private for s
 YOUTUBE_SCOPES = [
     "https://www.googleapis.com/auth/youtube.upload",
     "https://www.googleapis.com/auth/youtube.readonly",
+    "https://www.googleapis.com/auth/youtube.force-ssl",  # required for posting comments
 ]
 
 # ── Logging ───────────────────────────────────────────────────────────────────
@@ -81,5 +85,6 @@ LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 LOG_FILE = LOGS_DIR / "pipeline.log"
 
 # ── Tier 3: Automation ────────────────────────────────────────────────────────
-TOPICS_QUEUE_PATH = BASE_DIR / "topics_queue.json"
-ANALYTICS_PATH    = OUTPUT_DIR / "analytics.json"
+TOPICS_QUEUE_PATH    = BASE_DIR / "topics_queue.json"
+VIDEO_REGISTRY_PATH  = BASE_DIR / "video_registry.json"
+ANALYTICS_PATH       = OUTPUT_DIR / "analytics.json"

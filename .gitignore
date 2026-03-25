@@ -22,10 +22,18 @@ assets/music/
 assets/images/
 assets/audio/
 assets/video/
+# Personal voice recordings (biometric data — never commit)
+assets/voice_sample.wav
+assets/voice_sample.m4a
+voice-Merve.m4a
+*.m4a
+*.wav
+!assets/music/*.mp3
 
 # ── Python ────────────────────────────────────────────────────────────────────
 __pycache__/
 *.py[cod]
+*.pyc
 *.pyo
 *.pyd
 .Python
@@ -52,6 +60,15 @@ desktop.ini
 
 # ── Dev reference docs (kept in Claude memory, not in repo) ───────────────────
 PROJECT_CONTEXT.md
+NEXT_STEPS.md
+ROADMAP.md
+
+# ── Local-only data files ──────────────────────────────────────────────────────
+video_registry.json
+
+# ── Marketing & growth strategy (local only) ──────────────────────────────────
+growth/
+marketing/
 
 # ── IDE ───────────────────────────────────────────────────────────────────────
 .vscode/

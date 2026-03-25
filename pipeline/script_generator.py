@@ -23,6 +23,8 @@ def _call_claude(client: anthropic.Anthropic, **kwargs) -> anthropic.types.Messa
     return client.messages.create(**kwargs)
 
 
+SUBSCRIBE_CTA = "Follow @ThatActuallyHappened11 for more real history that sounds completely fake."
+
 SYSTEM_PROMPT = """You are a viral YouTube Shorts scriptwriter specializing in
 historical content. You write punchy, engaging scripts that hook viewers in the
 first second and leave them astonished. Scripts must be exactly 4 parts:
@@ -37,28 +39,48 @@ Location: {location}
 
 STRICT REQUIREMENTS:
 - Total script: 20-30 seconds when read aloud (~80 words MAX)
-- Hook: 1 sentence that grabs attention instantly (pose a shocking question or statement)
+- Hook: 1 sentence — must stop the scroll in under 2 seconds. Choose the strongest formula for this event:
+  • SHOCKING FACT: Lead with the most unbelievable true detail. "A man once sold the Eiffel Tower — twice."
+  • FALSE ASSUMPTION: State what everyone believes, then immediately break it. "Everyone thinks Einstein failed math. He didn't — but his teachers still wanted him gone."
+  • CONSEQUENCE FIRST: Start with the dramatic outcome, then explain how. "This one telegram started World War One."
+  • SPECIFIC NUMBER: A precise number creates instant credibility. "In 1518, 400 people danced non-stop for 2 months — and couldn't stop."
+  • DIRECT ADDRESS: Pull the viewer in personally. "You've used this invention today — but its creator was executed for making it."
 - Context: 2 sentences explaining what happened
 - Twist: 1 sentence revealing the most unbelievable part
 - Ending fact: 1 sentence with a mind-blowing fact to end on
 
+HOOK RULES:
+- Never start with "Did you know" — it signals low-quality content
+- Never start with "In [year]" — bury the date in context, not the hook
+- The hook must work as audio only — no "look at this" or visual references
+- Under 15 words is ideal; 20 words absolute max
+
 YouTube SEO requirements:
-- title: Under 60 characters. Format: shocking hook or question + year (e.g. "The Soldier Who Fought Alone for 29 Years | 1945"). Factual, no ALL CAPS.
-- description: Exactly 2 sentences — what happened + why it matters. End with "Follow for more unbelievable history." (150-200 chars total)
-- hashtags: 5 general tags (history, shorts, facts, etc.)
-- youtube_tags: 10-15 tags mixing broad ("history", "shorts", "documentary") and specific (event location, year, key figures/topics). No # prefix.
+- title: Under 60 characters. Front-load the most searchable keyword first (e.g. "Tesla's Stolen Invention That Changed the World | 1900"). Factual, no ALL CAPS. No misleading claims.
+- description: 150-300 words. MUST start with educational framing: "This educational short explores..." or "Explore the true historical story of...". Then: 2-3 sentence summary → 2-3 sentences of deeper context/why it matters → 1-2 sentences on broader historical significance → call to action ("Follow for more unbelievable history."). Weave in relevant keywords naturally throughout.
+- hashtags: 5 general tags (history, shorts, facts, etc.). No # prefix.
+- youtube_tags: 20 tags mixing broad ("history", "shorts", "documentary", "facts") and specific (inventor name, invention type, location, year, key themes, related figures). No # prefix. Aim to fill close to 500 characters total.
+
+YouTube Safe Distribution rules (CRITICAL — violations cause demotion):
+- NEVER use conspiracy framing: "covered up", "they don't want you to know", "suppressed by", "secret history", "what historians hide", "the truth about"
+- NEVER glorify violence, suffering, or death — describe historical facts with context, not shock
+- If the event involves violence or death, frame it as a historical record: "historical records show...", "according to accounts from the time..."
+- Titles must be accurate — never overpromise what the video contains
+- NEVER generate content about: suicide methods, sexual violence, child harm, terrorism glorification
 
 Return ONLY this JSON (no markdown, no extra text):
 {{
-  "title": "Punchy title under 60 chars with year",
-  "description": "2-sentence description ending with call to action (150-200 chars)",
+  "title": "Keyword-first title under 60 chars with year",
+  "description": "150-300 word SEO description ending with call to action",
   "hashtags": ["history", "unbelievable", "shorts", "facts", "historical"],
   "youtube_tags": ["history", "shorts", "historical facts", "documentary", "unreal history"],
+  "hook_type": "SHOCKING_FACT|FALSE_ASSUMPTION|CONSEQUENCE_FIRST|SPECIFIC_NUMBER|DIRECT_ADDRESS",
   "hook": "Hook sentence here",
   "context": "Context sentences here.",
   "twist": "Twist sentence here.",
   "ending_fact": "Ending fact sentence here.",
   "full_script": "Complete script as one flowing paragraph (hook + context + twist + ending_fact combined)",
+  "pin_comment": "A short engaging question specific to this story that will be pinned as the first comment to drive replies (e.g. 'Did you know about this before? What shocked you most? 👇')",
   "word_count": 0,
   "estimated_seconds": 0
 }}"""
@@ -156,8 +178,8 @@ def _parse_json_response(text: str) -> dict:
 
 def _validate_and_fix_script(script: dict) -> dict:
     """Validate script fields and compute word count / estimated duration."""
-    required_keys = ["title", "description", "hashtags", "youtube_tags", "hook",
-                     "context", "twist", "ending_fact", "full_script"]
+    required_keys = ["title", "description", "hashtags", "youtube_tags", "hook_type",
+                     "hook", "context", "twist", "ending_fact", "full_script", "pin_comment"]
 
     list_keys = {"hashtags", "youtube_tags"}
     for key in required_keys:
@@ -198,5 +220,21 @@ def _validate_and_fix_script(script: dict) -> dict:
     # Clamp title to 60 chars for CTR
     if len(script.get("title", "")) > 60:
         script["title"] = script["title"][:57] + "..."
+
+    # Clamp description to YouTube's 5000 char limit (safety net)
+    if len(script.get("description", "")) > 5000:
+        script["description"] = script["description"][:4997] + "..."
+
+    # Clamp total youtube_tags to ~500 chars (YouTube tag limit)
+    tags = script.get("youtube_tags", [])
+    total = 0
+    clamped = []
+    for tag in tags:
+        if total + len(tag) + 1 <= 500:
+            clamped.append(tag)
+            total += len(tag) + 1
+        else:
+            break
+    script["youtube_tags"] = clamped
 
     return script

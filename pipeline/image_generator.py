@@ -1,7 +1,7 @@
 """
 STEP 3 — IMAGE GENERATION (FREE/LOCAL)
-Priority: Automatic1111 → ComfyUI → Hugging Face (primary remote, needs token)
-          → Pollinations.AI (free fallback) → PIL placeholder (guaranteed offline)
+Priority: Automatic1111 → ComfyUI → Hugging Face (needs token)
+          → Replicate (needs token, FLUX.1-schnell) → PIL placeholder (guaranteed offline)
 Generates 5 cinematic 9:16 images per event.
 Saves images to output/<slug>/images/<event_idx>/img_N.png
 """
@@ -47,8 +47,8 @@ def detect_backend() -> str:
     """
     Auto-detect which image generation backend to use as primary.
     Priority: A1111 (local) → ComfyUI (local) → Hugging Face (if token set)
-              → Replicate (if token set) → Pollinations.AI (free, no key).
-    Per-image fallback chain in generate_images: primary → pollinations → pil.
+              → Replicate (if token set) → PIL placeholder (offline fallback).
+    Per-image fallback chain in generate_images: primary → pil.
     """
     if _check_a1111():
         logger.info("[image_generator] Backend: Automatic1111 (local)")
@@ -62,9 +62,8 @@ def detect_backend() -> str:
     if config.REPLICATE_API_TOKEN:
         logger.info("[image_generator] Backend: Replicate (remote, paid)")
         return "replicate"
-    # Pollinations.AI: free, no key — used as primary if nothing else is configured
-    logger.info("[image_generator] Backend: Pollinations.AI (free, no API key required)")
-    return "pollinations"
+    logger.warning("[image_generator] No API backend configured — using PIL placeholder")
+    return "pil"
 
 
 # ── Prompt Building ───────────────────────────────────────────────────────────
@@ -291,47 +290,6 @@ def _generate_huggingface(prompt: str, out_path: Path) -> Path:
     return out_path
 
 
-# ── Pollinations.AI Backend (truly free, no API key, no sign-up) ──────────────
-
-@with_retry(max_retries=3, base_delay=2)
-def _generate_pollinations(prompt: str, out_path: Path) -> Path:
-    """
-    Generate one image via Pollinations.AI — completely free, no API key needed.
-    API: GET https://image.pollinations.ai/prompt/{encoded_prompt}?width=W&height=H
-    Returns the image directly as JPEG/PNG bytes.
-    """
-    import urllib.parse
-
-    # Pollinations works best with concise prompts — trim to 400 chars
-    safe_prompt = prompt[:400]
-    encoded_prompt = urllib.parse.quote(safe_prompt, safe="")
-
-    seed = int(time.time() * 1000) % 2147483647
-    url = (
-        f"https://image.pollinations.ai/prompt/{encoded_prompt}"
-        f"?width={config.IMAGE_WIDTH}&height={config.IMAGE_HEIGHT}"
-        f"&nologo=true&seed={seed}&model=flux"
-    )
-
-    req = urllib.request.Request(url, headers={"User-Agent": "UnrealHistoryBot/1.0"})
-
-    try:
-        with urllib.request.urlopen(req, timeout=120) as resp:
-            image_bytes = resp.read()
-    except urllib.error.HTTPError as e:
-        raise RuntimeError(f"Pollinations.AI HTTP error {e.code}: {e.reason}")
-    except urllib.error.URLError as e:
-        raise RuntimeError(f"Pollinations.AI connection failed: {e}")
-
-    if len(image_bytes) < 1024:
-        raise RuntimeError(
-            f"Pollinations.AI returned suspiciously small response ({len(image_bytes)} bytes)"
-        )
-
-    out_path.write_bytes(image_bytes)
-    return out_path
-
-
 # ── Replicate Backend (direct REST API — no replicate package, no Pydantic) ───
 
 def _generate_replicate(prompt: str, out_path: Path) -> Path:
@@ -353,32 +311,56 @@ def _generate_replicate(prompt: str, out_path: Path) -> Path:
         "Prefer": "wait=60",  # ask Replicate to wait up to 60s before returning
     }
 
+    # FLUX.1-schnell requires dimensions to be multiples of 32.
+    # Rather than snapping arbitrary config values, use the native aspect_ratio preset
+    # which guarantees correct output size without any dimension arithmetic.
     payload = {
         "input": {
             "prompt": prompt,
-            "negative_prompt": config.IMAGE_NEGATIVE_PROMPT,
-            "width": config.IMAGE_WIDTH,
-            "height": config.IMAGE_HEIGHT,
-            "num_inference_steps": 25,
-            "guidance_scale": 7.5,
+            "aspect_ratio": "9:16",     # native preset — guaranteed portrait output
             "num_outputs": 1,
+            "num_inference_steps": 4,   # FLUX.1-schnell optimal steps (distilled model)
+            "output_format": "png",
+            "output_quality": 100,
         }
     }
     if version:
-        payload["version"] = version
+        payload["version"] = version  # required for generic /v1/predictions endpoint
 
     data = json.dumps(payload).encode("utf-8")
-    api_url = "https://api.replicate.com/v1/predictions"
-    req = urllib.request.Request(api_url, data=data, headers=headers, method="POST")
+    # Use model-specific endpoint when no version is pinned (e.g. flux-schnell)
+    # Generic /v1/predictions requires a version hash; model endpoint does not.
+    if version:
+        api_url = "https://api.replicate.com/v1/predictions"
+    else:
+        api_url = f"https://api.replicate.com/v1/models/{model_id}/predictions"
 
-    try:
-        with urllib.request.urlopen(req, timeout=90) as resp:
-            prediction = json.loads(resp.read().decode("utf-8"))
-    except urllib.error.HTTPError as e:
-        body = e.read().decode("utf-8", errors="replace")
-        raise RuntimeError(f"Replicate API error {e.code}: {body}")
-    except urllib.error.URLError as e:
-        raise RuntimeError(f"Replicate connection failed: {e}")
+    # 429 retry loop — up to 3 attempts, honouring retry_after from response body
+    prediction = None
+    for rate_attempt in range(3):
+        req = urllib.request.Request(api_url, data=data, headers=headers, method="POST")
+        try:
+            with urllib.request.urlopen(req, timeout=90) as resp:
+                prediction = json.loads(resp.read().decode("utf-8"))
+            break  # success — exit retry loop
+        except urllib.error.HTTPError as e:
+            body = e.read().decode("utf-8", errors="replace")
+            if e.code == 429:
+                try:
+                    retry_after = int(json.loads(body).get("retry_after", 60))
+                except (ValueError, AttributeError):
+                    retry_after = 60
+                logger.warning(
+                    f"[image_generator] Replicate rate-limited (429) — "
+                    f"waiting {retry_after}s (attempt {rate_attempt + 1}/3)"
+                )
+                time.sleep(retry_after)
+                continue
+            raise RuntimeError(f"Replicate API error {e.code}: {body}")
+        except urllib.error.URLError as e:
+            raise RuntimeError(f"Replicate connection failed: {e}")
+    else:
+        raise RuntimeError("Replicate rate limit not resolved after 3 retries")
 
     prediction_id = prediction.get("id")
     if not prediction_id:
@@ -600,10 +582,8 @@ def generate_images(scripts: list[dict], slug: str) -> list[list[Path]]:
             generated = False
             last_error = None
 
-            # Build fallback chain: primary → pollinations → pil (guaranteed)
+            # Build fallback chain: primary → pil (guaranteed)
             backends_to_try = [backend] if backend != "pil" else []
-            if "pollinations" not in backends_to_try:
-                backends_to_try.append("pollinations")
             backends_to_try.append("pil")
 
             for attempt_backend in backends_to_try:
@@ -614,8 +594,6 @@ def generate_images(scripts: list[dict], slug: str) -> list[list[Path]]:
                         _generate_comfyui(prompt, out_path)
                     elif attempt_backend == "huggingface":
                         _generate_huggingface(prompt, out_path)
-                    elif attempt_backend == "pollinations":
-                        _generate_pollinations(prompt, out_path)
                     elif attempt_backend == "replicate":
                         _generate_replicate(prompt, out_path)
                     elif attempt_backend == "pil":

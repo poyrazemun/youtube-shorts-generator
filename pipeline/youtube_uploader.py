@@ -157,11 +157,58 @@ def _upload_video(service, video_path: Path, script: dict) -> dict:
     }
 
 
+def _post_pin_comment(service, video_id: str, comment_text: str) -> None:
+    """
+    Post a comment on the video as the channel owner.
+    This becomes the first visible comment — drives replies which boost the algorithm.
+    Note: auto-pinning is not available via YouTube API; pin manually in YouTube Studio.
+    """
+    try:
+        service.commentThreads().insert(
+            part="snippet",
+            body={
+                "snippet": {
+                    "videoId": video_id,
+                    "topLevelComment": {
+                        "snippet": {
+                            "textOriginal": comment_text,
+                        }
+                    }
+                }
+            }
+        ).execute()
+        logger.info(f"[youtube_uploader] Posted comment on {video_id}: {comment_text[:80]}...")
+        logger.info(f"[youtube_uploader] ⚠ Pin this comment manually in YouTube Studio → Comments")
+    except Exception as e:
+        logger.warning(f"[youtube_uploader] Comment post failed for {video_id}: {e}")
+
+
+def _append_to_registry(entry: dict) -> None:
+    """Persist video_id + metadata to video_registry.json (never cleared, committed to git)."""
+    registry = []
+    if config.VIDEO_REGISTRY_PATH.exists():
+        try:
+            with open(config.VIDEO_REGISTRY_PATH, "r", encoding="utf-8") as f:
+                registry = json.load(f)
+        except Exception:
+            registry = []
+
+    # Update existing entry or append new one
+    existing_ids = {r["video_id"] for r in registry}
+    if entry["video_id"] not in existing_ids:
+        registry.append(entry)
+        with open(config.VIDEO_REGISTRY_PATH, "w", encoding="utf-8") as f:
+            json.dump(registry, f, indent=2, ensure_ascii=False)
+        logger.debug(f"[youtube_uploader] Registered video {entry['video_id']} in video_registry.json")
+
+
 def upload_all_videos(
     video_paths: list[Path],
     scripts: list[dict],
     slug: str,
     thumbnail_paths: list | None = None,
+    topic: str = "",
+    keyword: str = "",
 ) -> list[dict]:
     """
     Upload all assembled videos to YouTube.
@@ -226,9 +273,22 @@ def upload_all_videos(
                 except Exception as thumb_err:
                     logger.warning(f"[youtube_uploader] Thumbnail upload failed for event {idx}: {thumb_err}")
 
+            # Post engagement comment (drives replies → algorithm signal)
+            pin_comment = script.get("pin_comment", "Which part of this story shocked you most? 👇")
+            _post_pin_comment(service, result["video_id"], pin_comment)
+
             # Save after each upload to preserve progress
             with open(results_path, "w") as f:
                 json.dump(upload_results, f, indent=2)
+
+            # Persist to the global registry (committed to git, survives CI cleanup)
+            _append_to_registry({
+                "video_id": result["video_id"],
+                "title": result["title"],
+                "slug": slug,
+                "topic": topic,
+                "keyword": keyword,
+            })
 
         except Exception as e:
             logger.error(f"[youtube_uploader] Upload failed for event {idx}: {e}")

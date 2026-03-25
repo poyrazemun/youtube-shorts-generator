@@ -11,16 +11,18 @@ Built entirely with **[Claude Code](https://claude.ai/claude-code)**, using its 
 ## How It Works
 
 ```
---refresh-topics        Claude generates a queue of topic/keyword combos
+--refresh-topics        Claude generates 25 topics, scores each for viral potential (1-10),
+                        discards anything below 7, filters out already-used keywords,
+                        resets stale runs, sorts by score — best topics queued first
        ↓
---auto (daily, via GitHub Actions)
+--auto (run daily via Windows Task Scheduler)
        ↓
   Step 1  event_discovery.py    Claude → 1 strange historical event
-  Step 2  script_generator.py   Claude + DuckDuckGo research → viral script + SEO metadata
-  Step 3  image_generator.py    HuggingFace FLUX.1-schnell → 5 cinematic images
-  Step 4  tts_generator.py      Edge TTS (Microsoft Neural) → narration audio
+  Step 2  script_generator.py   Claude + DuckDuckGo research → viral script with hook formula + SEO metadata
+  Step 3  image_generator.py    Replicate FLUX.1-schnell → 5 cinematic 9:16 images
+  Step 4  tts_generator.py      Edge TTS (en-US-ChristopherNeural) → narration audio
   Step 5a captions.py           Whisper / estimation → word-timed subtitles
-  Step 5b video_assembler.py    ffmpeg → 1080×1920 MP4 with burned captions + background music
+  Step 5b video_assembler.py    ffmpeg → 1080×1920 MP4 with burned captions + CTA overlay + background music
   Step 6  youtube_uploader.py   YouTube Data API v3 → upload with thumbnail
        ↓
 --analytics             Fetches view counts, feeds performance data back into topic generation
@@ -36,7 +38,7 @@ Every step is **resumable** — output is cached to disk, so re-running picks up
 - ffmpeg on PATH
 - Anthropic API key (Claude)
 - YouTube Data API v3 OAuth credentials
-- HuggingFace API token (optional — free tier, for better images)
+- Replicate API token (for image generation, ~$0.003/image)
 
 ```bash
 pip install -r requirements.txt
@@ -65,7 +67,7 @@ cp .env.example .env
 
 ```env
 ANTHROPIC_API_KEY=sk-ant-...
-HUGGINGFACE_API_TOKEN=hf_...     # optional
+REPLICATE_API_TOKEN=r8_...      # for image generation (~$0.003/image)
 YOUTUBE_PRIVACY=private
 ```
 
@@ -86,11 +88,14 @@ python orchestrator.py --analytics
 ## CLI
 
 ```bash
-# Automated mode — picks next topic from queue, runs full pipeline
+# Automated mode — picks highest-scoring topic from queue, runs full pipeline
 python orchestrator.py --auto
 
-# Regenerate topic queue (Claude generates 25 combos; auto-refreshes on Mondays via Actions)
+# Regenerate topic queue (Claude scores + filters 25 topics; run weekly to keep queue fresh)
 python orchestrator.py --refresh-topics
+
+# View current topic queue with virality scores
+python orchestrator.py --list-topics
 
 # Fetch YouTube analytics + print performance summary
 python orchestrator.py --analytics
@@ -105,33 +110,45 @@ python orchestrator.py --topic "Strange War Stories" --keyword "battle" [--count
 
 ---
 
-## GitHub Actions (Daily Automation)
+## Topic Virality Scoring
 
-The included `.github/workflows/daily.yml` runs `--auto` every day at 09:00 UTC.
+Every time `--refresh-topics` runs, Claude rates each generated topic on a 1–10 virality scale:
 
-**Required GitHub Secrets:**
-
-| Secret | Value |
+| Score | Meaning |
 |---|---|
-| `ANTHROPIC_API_KEY` | Anthropic API key |
-| `HUGGINGFACE_API_TOKEN` | HuggingFace token |
-| `YOUTUBE_CLIENT_SECRETS_B64` | `base64(client_secrets.json)` |
-| `YOUTUBE_CREDENTIALS_B64` | `base64(credentials.json)` |
+| 9–10 | Sounds completely fake but is true. Debunks a widely-held belief. Famous person in shocking context. |
+| 7–8 | Genuinely surprising with strong hook potential. |
+| < 7 | **Discarded** — not queued |
 
-```bash
-# Encode credentials for GitHub Secrets
-python -c "import base64; print(base64.b64encode(open('client_secrets.json','rb').read()).decode())"
-python -c "import base64; print(base64.b64encode(open('credentials.json','rb').read()).decode())"
-```
+Topics are sorted highest score first, so `--auto` always produces the most viral-potential video available.
 
-The workflow automatically:
-- Installs ffmpeg
-- Decodes credentials from secrets
-- Runs `--refresh-topics` if the queue is empty or it's Monday
-- Commits updated `topics_queue.json` back to the repo
-- Uploads generated `.mp4` files as downloadable artifacts (7-day retention)
+### Deduplication
 
-See [HOW_TO_USE.md](HOW_TO_USE.md) for the full step-by-step setup guide.
+Keywords from already-uploaded videos (tracked in `video_registry.json`) are automatically excluded during topic generation — both via the Claude prompt and a post-generation filter. This prevents the pipeline from regenerating videos on topics you've already covered.
+
+### Stale Run Recovery
+
+If a pipeline run crashes or is interrupted, the topic stays `in_progress`. On the next `--refresh-topics`, any `in_progress` entry older than 2 hours is automatically reset to `failed` and replaced with fresh topics.
+
+---
+
+## Hook Formulas
+
+Every script uses one of 5 proven hook formulas chosen by Claude for that specific event:
+
+| Formula | Example |
+|---|---|
+| SHOCKING_FACT | "A man once sold the Eiffel Tower — twice." |
+| FALSE_ASSUMPTION | "Everyone thinks Einstein failed math. He didn't — but his teachers still wanted him gone." |
+| CONSEQUENCE_FIRST | "This one telegram started World War One." |
+| SPECIFIC_NUMBER | "In 1518, 400 people danced non-stop for 2 months — and couldn't stop." |
+| DIRECT_ADDRESS | "You've used this invention today — but its creator was executed for making it." |
+
+Hard-banned openers: "Did you know", "In [year]...", any visual reference.
+
+## Daily Automation (Windows Task Scheduler)
+
+Run `--auto` daily and `--refresh-topics` weekly via Windows Task Scheduler. See [HOW_TO_USE.md](HOW_TO_USE.md) for the full setup guide.
 
 ---
 
@@ -141,8 +158,8 @@ See [HOW_TO_USE.md](HOW_TO_USE.md) for the full step-by-step setup guide.
 |---|---|---|
 | 1 | Automatic1111 (local) | Running with `--api` flag |
 | 2 | ComfyUI (local) | Running normally |
-| 3 | **HuggingFace** | `HUGGINGFACE_API_TOKEN` in `.env` |
-| 4 | Pollinations.AI | Internet only, no key needed |
+| 3 | HuggingFace | `HUGGINGFACE_API_TOKEN` in `.env` |
+| 4 | **Replicate** (FLUX.1-schnell) | `REPLICATE_API_TOKEN` in `.env` (~$0.003/img) |
 | 5 | PIL placeholder | Always available (offline fallback) |
 
 Each image is retried up to 3 times with exponential backoff before falling back to the next backend.
@@ -155,9 +172,9 @@ Each image is retried up to 3 times with exponential backoff before falling back
 |---|---|---|
 | 1 | Piper TTS (local) | Binary on PATH |
 | 2 | Coqui TTS (local) | `pip install TTS` |
-| 3 | **Edge TTS** | Included in requirements.txt |
+| 3 | **Edge TTS** | Included in requirements.txt (always available) |
 
-Default voice: `en-US-ChristopherNeural`
+Default Edge TTS voice: `en-US-ChristopherNeural` — used automatically in CI and for most local runs.
 
 ---
 
@@ -166,7 +183,8 @@ Default voice: `en-US-ChristopherNeural`
 - **Resolution**: 1080×1920 (9:16 vertical)
 - **Codec**: H.264, AAC 128kbps, 24fps
 - **Duration**: 20–30 seconds
-- **Subtitles**: Burned in, white bold text, semi-transparent background box
+- **Subtitles**: Burned in, white bold text, semi-transparent background box, positioned above YouTube Shorts UI
+- **CTA Overlay**: "Follow @ThatActuallyHappened11" — white text, top-center, appears in last 3 seconds
 - **Thumbnail**: 1280×720 PNG, uploaded to YouTube
 
 ---
@@ -177,7 +195,7 @@ Default voice: `en-US-ChristopherNeural`
 output/
   <slug>/
     events.json       step 1 — discovered event
-    scripts.json      step 2 — script + SEO metadata
+    scripts.json      step 2 — script + SEO metadata + hook_type
     images/           step 3 — 5 PNG images
     audio/            step 4 — narration WAV
     subtitles/        step 5a — .ass + .srt caption files
@@ -186,21 +204,24 @@ output/
     uploads.json      step 6 — video IDs + URLs
     state.json        per-step completion ledger
 
-topics_queue.json     topic queue (persisted in repo for CI)
+topics_queue.json     topic queue with virality scores (persisted in repo for CI)
+video_registry.json   persistent record of all uploaded videos (for analytics)
 logs/                 daily rotating logs (14-day retention)
+assets/music/         drop royalty-free .mp3 files here for background music
+growth/               marketing strategy guides (Reddit strategy, etc.)
 ```
 
 ---
 
-## Cost Estimate (per video, HuggingFace free tier)
+## Cost Estimate (per video)
 
 | Service | Cost |
 |---|---|
-| Claude API (event + script) | ~$0.01–0.03 |
-| HuggingFace (images, free tier) | Free |
+| Claude API (topic scoring + event + script) | ~$0.02–0.04 |
+| Replicate FLUX.1-schnell (5 images) | ~$0.015 |
 | Edge TTS (voice) | Free |
 | YouTube upload | Free |
-| **Total** | **~$0.01–0.03** |
+| **Total** | **~$0.03–0.05** |
 
 ---
 

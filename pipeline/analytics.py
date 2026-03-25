@@ -245,10 +245,30 @@ def fetch_analytics() -> dict:
     """
     service = _get_authenticated_service()
 
-    video_meta = _collect_uploaded_video_ids()
-    if not video_meta:
-        logger.info("[analytics] No local uploads.json found — fetching from channel directly.")
-        video_meta = _fetch_channel_videos(service)
+    # Always fetch all videos from the channel (source of truth)
+    video_meta = _fetch_channel_videos(service)
+
+    # Build enrichment map: video_id → {slug, topic, keyword}
+    # Priority: video_registry.json (persistent, committed to git) > local uploads.json
+    enrichment: dict[str, dict] = {}
+    for v in _collect_uploaded_video_ids():
+        enrichment[v["video_id"]] = v
+    if config.VIDEO_REGISTRY_PATH.exists():
+        try:
+            with open(config.VIDEO_REGISTRY_PATH, "r", encoding="utf-8") as f:
+                for entry in json.load(f):
+                    vid = entry.get("video_id")
+                    if vid:
+                        enrichment[vid] = entry
+        except Exception as e:
+            logger.debug(f"[analytics] Could not read video_registry.json: {e}")
+
+    for v in video_meta:
+        meta = enrichment.get(v["video_id"])
+        if meta:
+            v["slug"]    = meta.get("slug", v["slug"])
+            v["keyword"] = meta.get("keyword", v["keyword"])
+            v["topic"]   = meta.get("topic", v["topic"])
 
     if not video_meta:
         logger.info("[analytics] No videos found on channel.")
