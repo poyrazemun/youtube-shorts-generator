@@ -55,8 +55,8 @@ IMAGE_NEGATIVE_PROMPT = (
 )
 
 # Replicate model for image generation
-# FLUX.1-schnell: fast, high quality, same cost as SD (~$0.003/image)
-REPLICATE_IMAGE_MODEL = "black-forest-labs/flux-schnell"
+# FLUX.1-dev: high quality, optimal for cinematic historical images (~$0.025/image)
+REPLICATE_IMAGE_MODEL = "black-forest-labs/flux-dev"
 
 # ── TTS Settings ──────────────────────────────────────────────────────────────
 PIPER_MODEL = os.getenv("PIPER_MODEL", "en_US-lessac-medium")
