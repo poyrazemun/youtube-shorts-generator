@@ -65,6 +65,7 @@ ROADMAP.md
 
 # ── Local-only data files ──────────────────────────────────────────────────────
 video_registry.json
+topics_queue.json
 
 # ── Marketing & growth strategy (local only) ──────────────────────────────────
 growth/
