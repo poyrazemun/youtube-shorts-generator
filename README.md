@@ -233,7 +233,7 @@ growth/               marketing strategy guides (Reddit strategy, etc.)
 |---|---|
 | Claude API (topic scoring + event + script) | ~$0.02–0.04 |
 | Replicate FLUX.1-dev (5 images) | ~$0.015 |
-| Edge TTS (voice) | Free |
+| Kokoro TTS (voice) | Free |
 | YouTube upload | Free |
 | **Total** | **~$0.03–0.05** |
 
