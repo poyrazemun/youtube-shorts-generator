@@ -1,7 +1,7 @@
 """
 STEP 3 — IMAGE GENERATION (FREE/LOCAL)
 Priority: Automatic1111 → ComfyUI → Hugging Face (needs token)
-          → Replicate (needs token, FLUX.1-schnell) → PIL placeholder (guaranteed offline)
+          → Replicate (needs token, FLUX.1-dev) → PIL placeholder (guaranteed offline)
 Generates 5 cinematic 9:16 images per event.
 Saves images to output/<slug>/images/<event_idx>/img_N.png
 """
@@ -311,7 +311,7 @@ def _generate_replicate(prompt: str, out_path: Path) -> Path:
         "Prefer": "wait=60",  # ask Replicate to wait up to 60s before returning
     }
 
-    # FLUX.1-schnell requires dimensions to be multiples of 32.
+    # FLUX.1-dev requires dimensions to be multiples of 32.
     # Rather than snapping arbitrary config values, use the native aspect_ratio preset
     # which guarantees correct output size without any dimension arithmetic.
     payload = {
@@ -319,7 +319,7 @@ def _generate_replicate(prompt: str, out_path: Path) -> Path:
             "prompt": prompt,
             "aspect_ratio": "9:16",     # native preset — guaranteed portrait output
             "num_outputs": 1,
-            "num_inference_steps": 4,   # FLUX.1-schnell optimal steps (distilled model)
+            "num_inference_steps": 28,  # FLUX.1-dev optimal steps
             "output_format": "png",
             "output_quality": 100,
         }
