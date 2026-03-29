@@ -19,7 +19,7 @@ Built entirely with **[Claude Code](https://claude.ai/claude-code)**, using its 
        ↓
   Step 1  event_discovery.py    Claude → 1 strange historical event
   Step 2  script_generator.py   Claude + DuckDuckGo research → viral script with hook formula + SEO metadata
-  Step 3  image_generator.py    Replicate FLUX.1-schnell → 5 cinematic 9:16 images
+  Step 3  image_generator.py    Replicate FLUX.1-dev → 5 cinematic 9:16 images
   Step 4  tts_generator.py      Kokoro neural TTS → narration audio (fallback: Piper → Coqui → Edge TTS)
   Step 5a captions.py           Whisper / estimation → word-timed subtitles
   Step 5b video_assembler.py    ffmpeg → 1080×1920 MP4 with burned captions + CTA overlay + background music
@@ -81,7 +81,7 @@ YOUTUBE_PRIVACY=private
 **3. First run (opens browser for YouTube OAuth)**
 
 ```bash
-python orchestrator.py --analytics
+py -3.12 orchestrator.py --analytics
 ```
 
 ---
@@ -90,19 +90,19 @@ python orchestrator.py --analytics
 
 ```bash
 # Automated mode — picks highest-scoring topic from queue, runs full pipeline
-python orchestrator.py --auto
+py -3.12 orchestrator.py --auto
 
 # Regenerate topic queue (Claude scores + filters 25 topics; run weekly to keep queue fresh)
-python orchestrator.py --refresh-topics
+py -3.12 orchestrator.py --refresh-topics
 
 # View current topic queue with virality scores
-python orchestrator.py --list-topics
+py -3.12 orchestrator.py --list-topics
 
 # Fetch YouTube analytics + print performance summary
-python orchestrator.py --analytics
+py -3.12 orchestrator.py --analytics
 
 # Manual mode
-python orchestrator.py --topic "Strange War Stories" --keyword "battle" [--count N] [--no-upload]
+py -3.12 orchestrator.py --topic "Strange War Stories" --keyword "battle" [--count N] [--no-upload]
 
 # Flags available on all modes
 --no-upload    skip YouTube upload, save videos locally
@@ -160,7 +160,7 @@ Run `--auto` daily and `--refresh-topics` weekly via Windows Task Scheduler. See
 | 1 | Automatic1111 (local) | Running with `--api` flag |
 | 2 | ComfyUI (local) | Running normally |
 | 3 | HuggingFace | `HUGGINGFACE_API_TOKEN` in `.env` |
-| 4 | **Replicate** (FLUX.1-schnell) | `REPLICATE_API_TOKEN` in `.env` (~$0.003/img) |
+| 4 | **Replicate** (FLUX.1-dev) | `REPLICATE_API_TOKEN` in `.env` (~$0.003/img) |
 | 5 | PIL placeholder | Always available (offline fallback) |
 
 Each image is retried up to 3 times with exponential backoff before falling back to the next backend.
@@ -232,7 +232,7 @@ growth/               marketing strategy guides (Reddit strategy, etc.)
 | Service | Cost |
 |---|---|
 | Claude API (topic scoring + event + script) | ~$0.02–0.04 |
-| Replicate FLUX.1-schnell (5 images) | ~$0.015 |
+| Replicate FLUX.1-dev (5 images) | ~$0.015 |
 | Edge TTS (voice) | Free |
 | YouTube upload | Free |
 | **Total** | **~$0.03–0.05** |

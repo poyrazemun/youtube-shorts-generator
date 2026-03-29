@@ -43,7 +43,7 @@ Verify with: `espeak-ng --version`
 
 ### Step 1 — Generate your topic queue (do once, then weekly)
 ```bash
-python orchestrator.py --refresh-topics
+py -3.12 orchestrator.py --refresh-topics
 ```
 Claude generates 25 topic+keyword combos, scores each on viral potential (1–10), discards anything scoring below 7, and saves the rest sorted best-first to `topics_queue.json`.
 
@@ -55,7 +55,7 @@ Stale `in_progress` entries (from crashed or interrupted runs older than 2 hours
 
 ### Step 2 — View the queue (optional)
 ```bash
-python orchestrator.py --list-topics
+py -3.12 orchestrator.py --list-topics
 ```
 Shows all topics grouped by status with virality scores:
 ```
@@ -72,7 +72,7 @@ Picks the highest-scoring pending topic, runs all 6 pipeline steps, uploads to Y
 
 ### Step 4 — Check your analytics (after videos get views)
 ```bash
-python orchestrator.py --analytics
+py -3.12 orchestrator.py --analytics
 ```
 Fetches view counts from YouTube and prints a performance summary.
 When you next run `--refresh-topics`, this data is automatically fed to Claude
@@ -173,7 +173,7 @@ To run daily without touching your PC:
 |------|-------------------|-----------------------------------------------------------------|
 | 1    | Event Discovery   | Claude finds 1 strange real historical event                    |
 | 2    | Script Generation | Claude writes a viral 20–30s script using one of 5 hook formulas |
-| 3    | Image Generation  | Replicate FLUX.1-schnell generates 5 cinematic 9:16 images      |
+| 3    | Image Generation  | Replicate FLUX.1-dev generates 5 cinematic 9:16 images      |
 | 4    | Voice Generation  | Kokoro neural TTS (auto-fallback: Piper → Coqui → Edge TTS)     |
 | 5a   | Captions          | Whisper word timestamps or estimation-based SRT                 |
 | 5b   | Video Assembly    | ffmpeg: images + audio + captions + "Follow @ThatActuallyHappened11" overlay |
