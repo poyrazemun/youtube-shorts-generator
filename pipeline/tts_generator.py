@@ -1,6 +1,6 @@
 """
 STEP 4 — VOICE GENERATION (FREE/LOCAL)
-Priority: Piper TTS → Coqui TTS → Edge TTS (Microsoft Neural, default)
+Priority: Kokoro → Piper TTS → Coqui TTS → Edge TTS (Microsoft Neural, default)
 Generates WAV audio from script text.
 Saves to output/<slug>/audio/<event_idx>.wav
 """
@@ -18,6 +18,15 @@ logger = logging.getLogger(__name__)
 
 # ── Backend Detection ─────────────────────────────────────────────────────────
 
+def _check_kokoro() -> bool:
+    """Check if Kokoro TTS is installed (requires Python 3.10-3.12)."""
+    try:
+        from kokoro import KPipeline  # noqa: F401
+        return True
+    except ImportError:
+        return False
+
+
 def _check_piper() -> bool:
     """Check if Piper TTS binary is available on PATH."""
     return shutil.which(config.PIPER_BINARY) is not None
@@ -34,6 +43,9 @@ def _check_coqui() -> bool:
 
 def detect_tts_backend() -> str:
     """Auto-detect which TTS engine is available."""
+    if _check_kokoro():
+        logger.info("[tts_generator] TTS Backend: Kokoro (open-weight neural TTS)")
+        return "kokoro"
     if _check_piper():
         logger.info("[tts_generator] TTS Backend: Piper (local binary)")
         return "piper"
@@ -42,6 +54,42 @@ def detect_tts_backend() -> str:
         return "coqui"
     logger.info("[tts_generator] TTS Backend: Edge TTS (en-US-ChristopherNeural)")
     return "edge_tts"
+
+
+# ── Kokoro TTS ────────────────────────────────────────────────────────────────
+
+def _generate_kokoro(text: str, out_path: Path) -> Path:
+    """
+    Generate audio using Kokoro open-weight neural TTS.
+    Outputs 24kHz float32 audio, resampled to 44.1kHz mono WAV via ffmpeg.
+    Requires Python 3.10-3.12 and: pip install kokoro>=0.9.4 soundfile
+    """
+    from kokoro import KPipeline
+    import soundfile as sf
+    import numpy as np
+
+    pipeline = KPipeline(lang_code=config.KOKORO_LANG_CODE)
+    generator = pipeline(text, voice=config.KOKORO_VOICE, speed=config.KOKORO_SPEED)
+
+    chunks = []
+    for _, _, audio in generator:
+        chunks.append(audio)
+
+    if not chunks:
+        raise RuntimeError("Kokoro produced no audio output")
+
+    combined = np.concatenate(chunks)
+
+    # Write 24kHz raw file, then resample to 44.1kHz mono via ffmpeg
+    raw_path = out_path.with_suffix(".raw.wav")
+    sf.write(str(raw_path), combined, 24000)
+    _convert_mp3_to_wav(raw_path, out_path)
+    raw_path.unlink(missing_ok=True)
+
+    if not out_path.exists() or out_path.stat().st_size == 0:
+        raise RuntimeError("Kokoro produced no output file")
+
+    return out_path
 
 
 # ── Piper TTS ─────────────────────────────────────────────────────────────────
@@ -230,7 +278,9 @@ def generate_audio(scripts: list[dict], slug: str) -> list[Path]:
         )
 
         try:
-            if backend == "piper":
+            if backend == "kokoro":
+                _generate_kokoro(text, out_path)
+            elif backend == "piper":
                 _generate_piper(text, out_path)
             elif backend == "coqui":
                 _generate_coqui(text, out_path)

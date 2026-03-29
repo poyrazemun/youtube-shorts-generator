@@ -20,7 +20,7 @@ Built entirely with **[Claude Code](https://claude.ai/claude-code)**, using its 
   Step 1  event_discovery.py    Claude → 1 strange historical event
   Step 2  script_generator.py   Claude + DuckDuckGo research → viral script with hook formula + SEO metadata
   Step 3  image_generator.py    Replicate FLUX.1-schnell → 5 cinematic 9:16 images
-  Step 4  tts_generator.py      Edge TTS (en-US-ChristopherNeural) → narration audio
+  Step 4  tts_generator.py      Kokoro neural TTS → narration audio (fallback: Piper → Coqui → Edge TTS)
   Step 5a captions.py           Whisper / estimation → word-timed subtitles
   Step 5b video_assembler.py    ffmpeg → 1080×1920 MP4 with burned captions + CTA overlay + background music
   Step 6  youtube_uploader.py   YouTube Data API v3 → upload with thumbnail
@@ -34,8 +34,9 @@ Every step is **resumable** — output is cached to disk, so re-running picks up
 
 ## Requirements
 
-- Python 3.10+
+- Python 3.12 (Kokoro TTS requires 3.10–3.12)
 - ffmpeg on PATH
+- espeak-ng on PATH (required by Kokoro)
 - Anthropic API key (Claude)
 - YouTube Data API v3 OAuth credentials
 - Replicate API token (for image generation, ~$0.003/image)
@@ -170,11 +171,24 @@ Each image is retried up to 3 times with exponential backoff before falling back
 
 | Priority | Backend | Requirement |
 |---|---|---|
-| 1 | Piper TTS (local) | Binary on PATH |
-| 2 | Coqui TTS (local) | `pip install TTS` |
-| 3 | **Edge TTS** | Included in requirements.txt (always available) |
+| 1 | **Kokoro** (open-weight neural TTS) | `pip install kokoro>=0.9.4 soundfile` + espeak-ng + Python 3.10–3.12 |
+| 2 | Piper TTS (local) | Binary on PATH |
+| 3 | Coqui TTS (local) | `pip install TTS` |
+| 4 | **Edge TTS** | Included in requirements.txt (always available fallback) |
 
-Default Edge TTS voice: `en-US-ChristopherNeural` — used automatically in CI and for most local runs.
+Default Kokoro voice: `af_heart` (American Female, warm tone).
+
+### Customising Voice
+
+Set in `.env` — no code changes needed:
+
+```env
+KOKORO_VOICE=af_heart      # af_heart / am_echo / bf_emma / bm_george / am_liam ...
+KOKORO_LANG_CODE=a         # a=American EN, b=British EN, e=Spanish, f=French, h=Hindi, i=Italian, p=Portuguese
+KOKORO_SPEED=1.0           # 0.5=slow · 1.0=normal · 1.5=fast
+```
+
+> Voice and lang code must match — e.g. `bm_george` requires `KOKORO_LANG_CODE=b`. See [HOW_TO_USE.md](HOW_TO_USE.md) for the full voice list.
 
 ---
 

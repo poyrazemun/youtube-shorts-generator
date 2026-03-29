@@ -7,6 +7,9 @@ python-dotenv>=1.0.0
 
 # ── TTS (Edge TTS is the free fallback — Microsoft Neural voices, no API key) ──
 edge-tts>=6.1.0
+# Kokoro TTS (best quality, open-weight neural TTS — requires Python 3.10-3.12):
+kokoro>=0.9.4
+soundfile
 # Optional local TTS (install separately if desired):
 #   Coqui TTS:  pip install TTS
 #   Piper:      download binary from https://github.com/rhasspy/piper/releases

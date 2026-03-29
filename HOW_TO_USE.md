@@ -8,8 +8,10 @@ Automated YouTube Shorts pipeline. Generates and uploads short videos about stra
 
 ### 1. Install dependencies
 ```bash
-pip install -r requirements.txt
+py -3.12 -m pip install -r requirements.txt
 ```
+
+> **Python version:** Use **Python 3.12** (`py -3.12`). Kokoro TTS (the default voice engine) requires Python 3.10–3.12 and will not work on 3.13+.
 
 ### 2. Create your `.env` file in the project root
 ```env
@@ -27,6 +29,13 @@ LOG_LEVEL=INFO
 
 ### 4. Install ffmpeg
 Download from https://ffmpeg.org/download.html and make sure `ffmpeg` is on your PATH.
+
+### 5. Install espeak-ng (required for Kokoro TTS)
+Download the `.msi` installer from https://github.com/espeak-ng/espeak-ng/releases and install it.
+Then add `C:\Program Files\eSpeak NG` to your system PATH.
+Verify with: `espeak-ng --version`
+
+> Windows Defender may flag the installer — this is a false positive. Click **More info → Run anyway**.
 
 ---
 
@@ -57,7 +66,7 @@ Shows all topics grouped by status with virality scores:
 
 ### Step 3 — Run the pipeline (one video per run)
 ```bash
-python orchestrator.py --auto
+py -3.12 orchestrator.py --auto
 ```
 Picks the highest-scoring pending topic, runs all 6 pipeline steps, uploads to YouTube.
 
@@ -75,20 +84,63 @@ so it generates more topics like your best performers.
 
 ```bash
 # Test the pipeline without uploading to YouTube
-python orchestrator.py --auto --no-upload
+py -3.12 orchestrator.py --auto --no-upload
 
 # Manual mode — specify topic and keyword yourself
-python orchestrator.py --topic "The Radium Girls" --keyword "radium"
+py -3.12 orchestrator.py --topic "The Radium Girls" --keyword "radium"
 
 # Manual mode without upload
-python orchestrator.py --topic "Weird Science" --keyword "invention" --no-upload
+py -3.12 orchestrator.py --topic "Weird Science" --keyword "invention" --no-upload
 
 # Verbose debug output (shows all internal steps)
-python orchestrator.py --auto --verbose
+py -3.12 orchestrator.py --auto --verbose
 
 # Re-run after a failure (pipeline is resumable — picks up where it left off)
-python orchestrator.py --auto
+py -3.12 orchestrator.py --auto
 ```
+
+---
+
+## Changing the Voice
+
+Voice settings are controlled via your `.env` file:
+
+```env
+KOKORO_VOICE=af_heart        # voice name (see table below)
+KOKORO_LANG_CODE=a           # language code (see table below)
+KOKORO_SPEED=1.0             # speaking speed (0.5 = slow, 1.0 = normal, 1.5 = fast)
+```
+
+### Available Voices
+
+| Voice | Gender | Accent |
+|-------|--------|--------|
+| `af_heart` | Female | American (warm, default) |
+| `af_bella` | Female | American |
+| `af_nova` | Female | American |
+| `am_echo` | Male | American |
+| `am_eric` | Male | American |
+| `am_liam` | Male | American |
+| `bf_emma` | Female | British |
+| `bf_isabella` | Female | British |
+| `bm_george` | Male | British |
+| `bm_lewis` | Male | British |
+
+### Available Language Codes
+
+| Code | Language |
+|------|----------|
+| `a` | American English (default) |
+| `b` | British English |
+| `e` | Spanish |
+| `f` | French |
+| `h` | Hindi |
+| `i` | Italian |
+| `p` | Brazilian Portuguese |
+| `j` | Japanese (`pip install misaki[ja]` required) |
+| `z` | Mandarin Chinese (`pip install misaki[zh]` required) |
+
+> Make sure `KOKORO_VOICE` and `KOKORO_LANG_CODE` match — e.g. a British voice (`bm_george`) must use lang code `b`.
 
 ---
 
@@ -122,7 +174,7 @@ To run daily without touching your PC:
 | 1    | Event Discovery   | Claude finds 1 strange real historical event                    |
 | 2    | Script Generation | Claude writes a viral 20–30s script using one of 5 hook formulas |
 | 3    | Image Generation  | Replicate FLUX.1-schnell generates 5 cinematic 9:16 images      |
-| 4    | Voice Generation  | Edge TTS (en-US-ChristopherNeural) narration                    |
+| 4    | Voice Generation  | Kokoro neural TTS (auto-fallback: Piper → Coqui → Edge TTS)     |
 | 5a   | Captions          | Whisper word timestamps or estimation-based SRT                 |
 | 5b   | Video Assembly    | ffmpeg: images + audio + captions + "Follow @ThatActuallyHappened11" overlay |
 | 6    | YouTube Upload    | Uploads video + thumbnail to your channel                       |
@@ -169,7 +221,10 @@ growth/               ← marketing guides (Reddit strategy)
 | `ANTHROPIC_API_KEY is not set` | Add your key to `.env` |
 | `YouTube client secrets not found` | Download `client_secrets.json` from Google Cloud Console |
 | `ffmpeg not found` | Install ffmpeg and add it to your system PATH |
-| Topic queue exhausted | Run `python orchestrator.py --refresh-topics` |
+| `ModuleNotFoundError: kokoro` | Run `py -3.12 -m pip install kokoro>=0.9.4 soundfile` |
+| Kokoro falls back to Edge TTS | Make sure you're running with `py -3.12` — Kokoro requires Python 3.10–3.12 |
+| `espeak-ng not found` | Install from https://github.com/espeak-ng/espeak-ng/releases and add to PATH |
+| Topic queue exhausted | Run `py -3.12 orchestrator.py --refresh-topics` |
 | Duplicate video generated | Already fixed — `--refresh-topics` now excludes keywords from `video_registry.json` |
 | Topics stuck as `in_progress` | Automatically reset after 2 hours on next `--refresh-topics` |
 | Images failing to generate | Check `REPLICATE_API_TOKEN` in `.env` — PIL placeholder used as fallback |
