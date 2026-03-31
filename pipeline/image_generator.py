@@ -68,22 +68,113 @@ def detect_backend() -> str:
 
 # ── Prompt Building ───────────────────────────────────────────────────────────
 
+# Filler phrase openers that add no visual information and should be stripped
+# from narrative text before embedding it into an image generation prompt.
+_FILLER_OPENER_RE = re.compile(
+    r"^(did you know[\s,]*|in \d{4}[\s,]*|in this moment[\s,]*"
+    r"|at this point[\s,]*|this is[\s,]*|here,?\s)",
+    flags=re.IGNORECASE,
+)
+
+
+def _extract_visual_fragment(text: str, max_words: int = 12) -> str:
+    """
+    Extract a short, visually descriptive fragment from a narrative sentence.
+    Strips common filler openers and trims to a concise noun/verb phrase
+    suitable for inclusion in an image generation prompt.
+    """
+    if not text:
+        return ""
+    text = _FILLER_OPENER_RE.sub("", text.strip())
+    # Strip any residual leading punctuation or whitespace left by the substitution
+    text = text.lstrip(" ,;:")
+    words = text.split()
+    return " ".join(words[:max_words]).rstrip(".,;:!?")
+
+
 def _build_image_prompts(script: dict) -> list[str]:
-    """Build 5 distinct image prompts for an event's visual sequence."""
+    """
+    Build 5 visually distinct image prompts for an event's visual sequence.
+
+    Each prompt is tied to a different narrative beat (hook, context, twist,
+    aftermath, symbol) and uses a unique combination of lighting, color palette,
+    composition, and subject focus so the resulting images look meaningfully
+    different from one another while all remaining relevant to the event.
+    """
     event = script.get("source_event", {})
     visual_theme = event.get("visual_theme", event.get("event", ""))
     year = event.get("year", "historical")
     location = event.get("location", "")
 
-    base_context = f"{visual_theme}, {year}, {location}"
+    # Core identifiers shared by all shots
+    event_core = f"{visual_theme}, {year}"
+    location_clause = f" in {location}" if location else ""
+
+    # Narrative beats from the generated script — used as shot-specific subjects
+    hook_fragment = _extract_visual_fragment(script.get("hook", ""))
+    context_fragment = _extract_visual_fragment(script.get("context", ""))
+    twist_fragment = _extract_visual_fragment(script.get("twist", ""))
+    ending_fragment = _extract_visual_fragment(script.get("ending_fact", ""))
+
     style = config.IMAGE_STYLE_PROMPT
 
     prompts = [
-        f"Wide establishing shot, {base_context}, {style}",
-        f"Close-up dramatic portrait of main subject, {base_context}, {style}",
-        f"Action scene at the height of the event, {base_context}, {style}",
-        f"Aftermath and consequence, {base_context}, moody {style}",
-        f"Historical artifact or symbolic detail, {base_context}, {style}",
+        # Shot 1 — Establishing / Hook
+        # Panoramic wide shot, dawn golden hour, warm amber palette.
+        # Immediately communicates scale and the shocking premise of the event.
+        (
+            f"Wide panoramic establishing shot, {event_core}{location_clause}, "
+            f"{hook_fragment + ', ' if hook_fragment else ''}"
+            f"dawn golden hour light, long shadows across vast landscape, "
+            f"warm amber and burnt-orange color grading, "
+            f"{style}"
+        ),
+
+        # Shot 2 — Context / People
+        # Medium crowd or figure shot, overcast flat daylight, cool blue-gray palette.
+        # Shows the human element and historical setting.
+        (
+            f"Medium shot of historical figures or crowd, {event_core}{location_clause}, "
+            f"{context_fragment + ', ' if context_fragment else ''}"
+            f"overcast flat natural daylight, tense atmospheric composition, "
+            f"desaturated cool blue-gray and slate tones, "
+            f"{style}"
+        ),
+
+        # Shot 3 — Twist / Action
+        # Dynamic action or confrontation, hard dramatic side-lighting, high-contrast chiaroscuro.
+        # Captures the pivotal turning-point moment.
+        (
+            f"Dynamic action shot at the decisive turning point, {event_core}{location_clause}, "
+            f"{twist_fragment + ', ' if twist_fragment else ''}"
+            f"hard dramatic side-lighting with deep ink-black shadows, "
+            f"high-contrast chiaroscuro, urgent motion blur, "
+            f"monochromatic near-black tones with single vivid accent color, "
+            f"{style}"
+        ),
+
+        # Shot 4 — Aftermath / Consequence
+        # Quiet sparse scene, dusk fading light, muted sepia palette.
+        # Communicates emotional weight and historical consequence.
+        (
+            f"Quiet aftermath scene, sparse and desolate, {event_core}{location_clause}, "
+            f"{ending_fragment + ', ' if ending_fragment else ''}"
+            f"dusk fading twilight, low warm horizon light, solitary figure or lone object, "
+            f"muted sepia and dusty brown tones, melancholy and weight, "
+            f"moody {style}"
+        ),
+
+        # Shot 5 — Symbol / Artifact
+        # Extreme close-up of a symbolic object or detail, isolated studio spotlight.
+        # Timeless, iconic, and visually unlike the other four shots.
+        (
+            f"Extreme close-up of symbolic historical artifact or telling detail, "
+            f"{event_core}{location_clause}, "
+            f"isolated on deep-black background, single soft spotlight, "
+            f"rich warm candlelight and burnished gold tones, "
+            f"fine texture and craftsmanship, timeless and iconic, "
+            f"{style}"
+        ),
     ]
     return prompts
 
