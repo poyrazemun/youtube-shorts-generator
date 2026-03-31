@@ -27,8 +27,8 @@ SUBSCRIBE_CTA = "Follow @ThatActuallyHappened11 for more real history that sound
 
 SYSTEM_PROMPT = """You are a viral YouTube Shorts scriptwriter specializing in
 historical content. You write punchy, engaging scripts that hook viewers in the
-first second and leave them astonished. Scripts must be exactly 4 parts:
-Hook → Context → Twist → Ending fact.
+first second and leave them astonished. Scripts must be exactly 5 parts:
+Hook → Context → Pattern Interrupt → Twist → Loop Ending.
 Always respond with valid JSON only — no markdown fences, no extra text."""
 
 USER_PROMPT_TEMPLATE = """Write a viral YouTube Shorts script for this historical event:
@@ -38,7 +38,7 @@ Year: {year}
 Location: {location}
 
 STRICT REQUIREMENTS:
-- Total script: 20-30 seconds when read aloud (~80 words MAX)
+- Total script: 35-45 seconds when read aloud (~110 words MAX)
 - Hook: 1 sentence — must stop the scroll in under 2 seconds. Choose the strongest formula for this event:
   • SHOCKING FACT: Lead with the most unbelievable true detail. "A man once sold the Eiffel Tower — twice."
   • FALSE ASSUMPTION: State what everyone believes, then immediately break it. "Everyone thinks Einstein failed math. He didn't — but his teachers still wanted him gone."
@@ -46,14 +46,19 @@ STRICT REQUIREMENTS:
   • SPECIFIC NUMBER: A precise number creates instant credibility. "In 1518, 400 people danced non-stop for 2 months — and couldn't stop."
   • DIRECT ADDRESS: Pull the viewer in personally. "You've used this invention today — but its creator was executed for making it."
 - Context: 2 sentences explaining what happened
+- Pattern interrupt: 1 sentence — a surprising pause, question, or tone shift midway to combat the 3-second swipe (e.g. "But here's the part nobody talks about." or "Wait — it gets stranger.")
 - Twist: 1 sentence revealing the most unbelievable part
-- Ending fact: 1 sentence with a mind-blowing fact to end on
+- Loop ending: 1 sentence that connects back to the hook or reframes the opening to make viewers want to re-watch (e.g. "And that's why the very first line of this story means something completely different now.")
 
 HOOK RULES:
 - Never start with "Did you know" — it signals low-quality content
 - Never start with "In [year]" — bury the date in context, not the hook
 - The hook must work as audio only — no "look at this" or visual references
 - Under 15 words is ideal; 20 words absolute max
+
+RETENTION RULES:
+- The ending must create a **loop** — make viewers want to re-watch by connecting back to the hook or revealing something that reframes the opening
+- Add a **pattern interrupt** midway (a surprising pause, question, or tone shift) to combat the 3-second swipe
 
 YouTube SEO requirements:
 - title: Under 60 characters. Front-load the most searchable keyword first (e.g. "Tesla's Stolen Invention That Changed the World | 1900"). Factual, no ALL CAPS. No misleading claims.
@@ -77,9 +82,10 @@ Return ONLY this JSON (no markdown, no extra text):
   "hook_type": "SHOCKING_FACT|FALSE_ASSUMPTION|CONSEQUENCE_FIRST|SPECIFIC_NUMBER|DIRECT_ADDRESS",
   "hook": "Hook sentence here",
   "context": "Context sentences here.",
+  "pattern_interrupt": "Pattern interrupt sentence here.",
   "twist": "Twist sentence here.",
-  "ending_fact": "Ending fact sentence here.",
-  "full_script": "Complete script as one flowing paragraph (hook + context + twist + ending_fact combined)",
+  "ending_fact": "Loop ending sentence that reframes the opening.",
+  "full_script": "Complete script as one flowing paragraph (hook + context + pattern_interrupt + twist + ending_fact combined)",
   "pin_comment": "A short engaging question specific to this story that will be pinned as the first comment to drive replies (e.g. 'Did you know about this before? What shocked you most? 👇')",
   "word_count": 0,
   "estimated_seconds": 0
@@ -179,7 +185,8 @@ def _parse_json_response(text: str) -> dict:
 def _validate_and_fix_script(script: dict) -> dict:
     """Validate script fields and compute word count / estimated duration."""
     required_keys = ["title", "description", "hashtags", "youtube_tags", "hook_type",
-                     "hook", "context", "twist", "ending_fact", "full_script", "pin_comment"]
+                     "hook", "context", "pattern_interrupt", "twist", "ending_fact",
+                     "full_script", "pin_comment"]
 
     list_keys = {"hashtags", "youtube_tags"}
     for key in required_keys:
@@ -194,6 +201,7 @@ def _validate_and_fix_script(script: dict) -> dict:
         full_script = " ".join([
             script.get("hook", ""),
             script.get("context", ""),
+            script.get("pattern_interrupt", ""),
             script.get("twist", ""),
             script.get("ending_fact", ""),
         ]).strip()
