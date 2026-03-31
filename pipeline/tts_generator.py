@@ -80,9 +80,24 @@ def _generate_kokoro(text: str, out_path: Path) -> Path:
 
     combined = np.concatenate(chunks)
 
+    # Trim leading and trailing silence so speech starts at t=0.
+    # This keeps subtitle estimation in sync with the actual voice.
+    # Threshold chosen for Kokoro's float32 output range (typically ±1.0);
+    # 0.01 is well below audible speech but above numerical noise.
+    kokoro_sample_rate = 24000
+    threshold = 0.01
+    above = np.abs(combined) > threshold
+    nonzero = np.nonzero(above)[0]
+    if len(nonzero) > 0:
+        # Keep a tiny 5 ms margin so the trim doesn't clip the attack
+        margin = int(0.005 * kokoro_sample_rate)
+        start_idx = max(0, nonzero[0] - margin)
+        end_idx = min(len(combined), nonzero[-1] + margin + 1)
+        combined = combined[start_idx:end_idx]
+
     # Write 24kHz raw file, then resample to 44.1kHz mono via ffmpeg
     raw_path = out_path.with_suffix(".raw.wav")
-    sf.write(str(raw_path), combined, 24000)
+    sf.write(str(raw_path), combined, kokoro_sample_rate)
     _convert_mp3_to_wav(raw_path, out_path)
     raw_path.unlink(missing_ok=True)
 

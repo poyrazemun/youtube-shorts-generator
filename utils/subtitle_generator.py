@@ -64,9 +64,12 @@ def generate_srt(script: dict, audio_duration: float, output_path: Path) -> Path
         output_path.write_text("", encoding="utf-8")
         return output_path
 
-    # Leave a 0.3s buffer at start and end
-    start_buffer = 0.3
-    available_duration = max(audio_duration - start_buffer, audio_duration * 0.9)
+    # Start subtitles from the beginning of the audio (no buffer).
+    # Kokoro and other local TTS engines produce speech with minimal
+    # leading silence, so an artificial start delay causes subtitles to
+    # lag behind the voice.
+    start_buffer = 0.0
+    available_duration = audio_duration
     seconds_per_word = available_duration / len(words)
 
     # Group into subtitle cards
