@@ -52,42 +52,31 @@ def _build_cta_drawtext(audio_duration: float) -> str:
 
 def _build_slideshow_filter(image_paths: list[Path], audio_duration: float) -> tuple[str, list]:
     """
-    Build ffmpeg filtergraph for image slideshow with Ken Burns zoom/pan effect.
+    Build ffmpeg filtergraph for image slideshow.
     Each image gets equal screen time to fill the audio duration.
-    Alternates between zoom-in and zoom-out for visual variety.
     Returns (filter_complex string, input_args list).
     """
     n = len(image_paths)
     per_image = audio_duration / n
-    fps = 24
-    frames = int(per_image * fps)
 
-    # Build input args: one -i <image> per image (zoompan handles duration via d=)
+    # Build input args: one -loop 1 -t <duration> -i <image> per image
     input_args = []
     for img_path in image_paths:
         input_args.extend([
+            "-loop", "1",
+            "-t", f"{per_image:.3f}",
             "-i", str(img_path),
         ])
 
-    # Ken Burns: alternate zoom-in and zoom-out for visual variety
-    # zoom-in: z='min(zoom+0.001,1.3)'
-    # zoom-out: z='if(eq(on,1),1.3,max(zoom-0.001,1))'
-    zoom_expressions = [
-        "min(zoom+0.001,1.3)",
-        "if(eq(on,1),1.3,max(zoom-0.001,1))",
-    ]
-
+    # Scale each image to 1080x1920, pad to exact size, then concatenate
     scale_parts = []
     for i in range(n):
-        zoom_expr = zoom_expressions[i % 2]
         scale_parts.append(
             f"[{i}:v]scale={config.VIDEO_WIDTH}:{config.VIDEO_HEIGHT}:"
-            f"force_original_aspect_ratio=increase,"
-            f"crop={config.VIDEO_WIDTH}:{config.VIDEO_HEIGHT},"
-            f"zoompan=z='{zoom_expr}':d={frames}:"
-            f"x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':"
-            f"s={config.VIDEO_WIDTH}x{config.VIDEO_HEIGHT}:fps={fps},"
-            f"setsar=1[v{i}]"
+            f"force_original_aspect_ratio=decrease,"
+            f"pad={config.VIDEO_WIDTH}:{config.VIDEO_HEIGHT}:"
+            f"(ow-iw)/2:(oh-ih)/2:color=black,"
+            f"setsar=1,fps=24[v{i}]"
         )
 
     concat_inputs = "".join(f"[v{i}]" for i in range(n))
