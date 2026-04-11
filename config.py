@@ -63,8 +63,8 @@ PIPER_MODEL = os.getenv("PIPER_MODEL", "en_US-lessac-medium")
 PIPER_BINARY = os.getenv("PIPER_BINARY", "piper")  # must be on PATH
 
 # Kokoro TTS (open-weight neural TTS, best quality — requires Python 3.10-3.12)
-KOKORO_VOICE = os.getenv("KOKORO_VOICE", "af_heart")   # af_heart, am_echo, bf_emma, bm_george
-KOKORO_LANG_CODE = os.getenv("KOKORO_LANG_CODE", "a")  # 'a'=American English, 'b'=British
+KOKORO_VOICE = os.getenv("KOKORO_VOICE", "bm_george")  # af_heart, am_echo, bf_emma, bm_george
+KOKORO_LANG_CODE = os.getenv("KOKORO_LANG_CODE", "b")  # 'a'=American English, 'b'=British
 KOKORO_SPEED = float(os.getenv("KOKORO_SPEED", "1.15"))
 
 # ── Video Assembly ────────────────────────────────────────────────────────────
