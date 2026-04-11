@@ -14,6 +14,7 @@ token*.json
 
 # ── Pipeline output ───────────────────────────────────────────────────────────
 output/
+test_output/
 logs/
 *.log
 

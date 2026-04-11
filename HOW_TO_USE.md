@@ -101,6 +101,22 @@ py -3.12 orchestrator.py --auto
 
 ---
 
+## Visual Testing (no API calls, no cost)
+
+Use `test_video.py` to instantly preview layout changes — subtitle position, font size, CTA overlay — without running the full pipeline.
+
+```bash
+py -3.12 test_video.py
+```
+
+Output: `test_output/test_video.mp4`
+
+It uses solid-colour placeholder images and `assets/voice_sample.wav` as audio. No Claude, no Replicate, no TTS — just ffmpeg.
+
+**When to use it:** any time you change subtitle positioning (`margin_v` in `captions.py` / `video_assembler.py`), font size, CTA timing, or any other visual parameter. Edit the constant, run the script, check the video.
+
+---
+
 ## Changing the Voice
 
 Voice settings are controlled via your `.env` file:

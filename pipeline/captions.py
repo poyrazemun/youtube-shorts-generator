@@ -6,6 +6,7 @@ If not installed: falls back to estimation-based SRT (existing behavior).
 
 Install Whisper (optional): pip install openai-whisper
 """
+
 import logging
 import re
 from pathlib import Path
@@ -18,6 +19,7 @@ _WORDS_PER_CARD = 3  # subtitle card size for Whisper path
 def _has_whisper() -> bool:
     try:
         import whisper  # noqa: F401
+
         return True
     except ImportError:
         return False
@@ -41,7 +43,7 @@ def _seconds_to_ass_ts(s: float) -> str:
 
 def _build_ass_header(W: int, H: int) -> str:
     font_size = int(H * 0.032)
-    margin_v = int(H * 0.35)    # ~672px from bottom — above YouTube Shorts UI on phones
+    margin_v = int(H * 0.22)  # ~422px from bottom — above YouTube Shorts UI on phones
     margin_lr = int(W * 0.05)
     box_pad = int(font_size * 0.35)
     return (

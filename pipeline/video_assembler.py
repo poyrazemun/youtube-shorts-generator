@@ -27,14 +27,13 @@ CTA_DURATION_SECS = 3.0  # show in last 3 seconds of video
 def _build_cta_drawtext(audio_duration: float) -> str:
     """Return an ffmpeg drawtext filter string for the subscribe CTA overlay."""
     H = config.VIDEO_HEIGHT  # 1920
-    font_size = int(H * 0.026)          # ~50px — fits "Follow @ThatActuallyHappened11" within 1080px
-    box_pad = int(font_size * 0.4)      # padding inside background box
+    font_size = int(
+        H * 0.026
+    )  # ~50px — fits "Follow @ThatActuallyHappened11" within 1080px
+    box_pad = int(font_size * 0.4)  # padding inside background box
     start_time = max(0.0, audio_duration - CTA_DURATION_SECS)
     safe_text = (
-        CTA_OVERLAY_TEXT
-        .replace("\\", "\\\\")
-        .replace("'", "\\'")
-        .replace(":", "\\:")
+        CTA_OVERLAY_TEXT.replace("\\", "\\\\").replace("'", "\\'").replace(":", "\\:")
     )
     return (
         f"drawtext=text='{safe_text}':"
@@ -50,7 +49,9 @@ def _build_cta_drawtext(audio_duration: float) -> str:
     )
 
 
-def _build_slideshow_filter(image_paths: list[Path], audio_duration: float) -> tuple[str, list]:
+def _build_slideshow_filter(
+    image_paths: list[Path], audio_duration: float
+) -> tuple[str, list]:
     """
     Build ffmpeg filtergraph for image slideshow.
     Each image gets equal screen time to fill the audio duration.
@@ -62,11 +63,16 @@ def _build_slideshow_filter(image_paths: list[Path], audio_duration: float) -> t
     # Build input args: one -loop 1 -t <duration> -i <image> per image
     input_args = []
     for img_path in image_paths:
-        input_args.extend([
-            "-loop", "1",
-            "-t", f"{per_image:.3f}",
-            "-i", str(img_path),
-        ])
+        input_args.extend(
+            [
+                "-loop",
+                "1",
+                "-t",
+                f"{per_image:.3f}",
+                "-i",
+                str(img_path),
+            ]
+        )
 
     # Scale each image to 1080x1920, pad to exact size, then concatenate
     scale_parts = []
@@ -100,18 +106,18 @@ def _convert_srt_to_ass(srt_path: Path, ass_path: Path) -> Path:
       - Semi-transparent dark box behind text for readability
       - Max ~2 lines visible (subtitle_generator caps cards at 7 words)
     """
-    W = config.VIDEO_WIDTH    # 1080
-    H = config.VIDEO_HEIGHT   # 1920
+    W = config.VIDEO_WIDTH  # 1080
+    H = config.VIDEO_HEIGHT  # 1920
 
-    font_size  = int(H * 0.032)   # ~61px  — clear on mobile, ≤ 7% of height per line
-    margin_v   = int(H * 0.35)    # ~672px from bottom — above YouTube Shorts UI on phones
-    margin_lr  = int(W * 0.05)    # ~54px horizontal padding
-    box_pad    = int(font_size * 0.35)  # ~21px padding inside the background box
+    font_size = int(H * 0.032)  # ~61px  — clear on mobile, ≤ 7% of height per line
+    margin_v = int(H * 0.22)  # ~422px from bottom — above YouTube Shorts UI on phones
+    margin_lr = int(W * 0.05)  # ~54px horizontal padding
+    box_pad = int(font_size * 0.35)  # ~21px padding inside the background box
 
     # ASS color: &HAABBGGRR  (AA: 00=opaque, FF=transparent)
-    primary_colour = "&H00FFFFFF"   # white, fully opaque
-    back_colour    = "&H80000000"   # black, 50% transparent (box background)
-    outline_colour = "&H00000000"   # black, fully opaque (thin text outline)
+    primary_colour = "&H00FFFFFF"  # white, fully opaque
+    back_colour = "&H80000000"  # black, 50% transparent (box background)
+    outline_colour = "&H00000000"  # black, fully opaque (thin text outline)
 
     ass_header = (
         "[Script Info]\n"
@@ -119,7 +125,7 @@ def _convert_srt_to_ass(srt_path: Path, ass_path: Path) -> Path:
         f"PlayResX: {W}\n"
         f"PlayResY: {H}\n"
         "ScaledBorderAndShadow: yes\n"
-        "WrapStyle: 1\n"          # smart word-wrap
+        "WrapStyle: 1\n"  # smart word-wrap
         "\n"
         "[V4+ Styles]\n"
         "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, "
@@ -129,18 +135,18 @@ def _convert_srt_to_ass(srt_path: Path, ass_path: Path) -> Path:
         f"Style: Default,"
         f"Arial,{font_size},"
         f"{primary_colour},"
-        f"&H000000FF,"            # SecondaryColour (unused)
+        f"&H000000FF,"  # SecondaryColour (unused)
         f"{outline_colour},"
         f"{back_colour},"
-        f"1,"                     # Bold
-        f"0,0,0,"                 # Italic, Underline, StrikeOut
-        f"100,100,1,0,"           # ScaleX, ScaleY, Spacing, Angle
-        f"3,"                     # BorderStyle=3: background box
-        f"{box_pad},"             # Outline = box internal padding
-        f"0,"                     # Shadow
-        f"2,"                     # Alignment=2: bottom-center
+        f"1,"  # Bold
+        f"0,0,0,"  # Italic, Underline, StrikeOut
+        f"100,100,1,0,"  # ScaleX, ScaleY, Spacing, Angle
+        f"3,"  # BorderStyle=3: background box
+        f"{box_pad},"  # Outline = box internal padding
+        f"0,"  # Shadow
+        f"2,"  # Alignment=2: bottom-center
         f"{margin_lr},{margin_lr},{margin_v},"
-        f"1\n"                    # Encoding
+        f"1\n"  # Encoding
         "\n"
         "[Events]\n"
         "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n"
@@ -172,9 +178,11 @@ def _convert_srt_to_ass(srt_path: Path, ass_path: Path) -> Path:
 
     ass_path.write_text(
         ass_header + "\n".join(dialogues) + "\n",
-        encoding="utf-8-sig",   # UTF-8 BOM — ensures libass reads correctly on Windows
+        encoding="utf-8-sig",  # UTF-8 BOM — ensures libass reads correctly on Windows
     )
-    logger.debug(f"[video_assembler] ASS subtitle written: {ass_path} ({len(dialogues)} lines)")
+    logger.debug(
+        f"[video_assembler] ASS subtitle written: {ass_path} ({len(dialogues)} lines)"
+    )
     return ass_path
 
 
@@ -218,7 +226,9 @@ def assemble_video(
         f"{audio_duration:.1f}s audio → {out_path.name}"
     )
 
-    filter_complex, image_input_args = _build_slideshow_filter(image_paths, audio_duration)
+    filter_complex, image_input_args = _build_slideshow_filter(
+        image_paths, audio_duration
+    )
 
     # We need to add subtitle burn-in as a second filter pass to avoid
     # complexities with subtitles in the main filtergraph (path escaping issues)
@@ -230,12 +240,16 @@ def assemble_video(
         # Pass 1: assemble slideshow + audio (no subtitles yet)
         n = len(image_paths)
         cmd_pass1 = [
-            "ffmpeg", "-y",
+            "ffmpeg",
+            "-y",
         ]
         cmd_pass1.extend(image_input_args)
-        cmd_pass1.extend([
-            "-i", str(audio_path),
-        ])
+        cmd_pass1.extend(
+            [
+                "-i",
+                str(audio_path),
+            ]
+        )
 
         if music_path and music_path.exists():
             cmd_pass1.extend(["-i", str(music_path)])
@@ -245,32 +259,48 @@ def assemble_video(
             )
             full_filter = filter_complex + amix
             audio_map = "[amixed]"
-            logger.debug(f"[video_assembler] Mixing background music: {music_path.name}")
+            logger.debug(
+                f"[video_assembler] Mixing background music: {music_path.name}"
+            )
         else:
             full_filter = filter_complex
             audio_map = f"{n}:a"
 
-        cmd_pass1.extend([
-            "-filter_complex", full_filter,
-            "-map", "[video_raw]",
-            "-map", audio_map,
-            "-c:v", "libx264",
-            "-preset", "fast",
-            "-crf", "23",
-            "-c:a", "aac",
-            "-b:a", "128k",
-            "-shortest",
-            "-r", "24",
-            "-pix_fmt", "yuv420p",
-            str(tmp_nosub),
-        ])
+        cmd_pass1.extend(
+            [
+                "-filter_complex",
+                full_filter,
+                "-map",
+                "[video_raw]",
+                "-map",
+                audio_map,
+                "-c:v",
+                "libx264",
+                "-preset",
+                "fast",
+                "-crf",
+                "23",
+                "-c:a",
+                "aac",
+                "-b:a",
+                "128k",
+                "-shortest",
+                "-r",
+                "24",
+                "-pix_fmt",
+                "yuv420p",
+                str(tmp_nosub),
+            ]
+        )
 
         logger.debug(f"[video_assembler] Pass 1 cmd: {' '.join(cmd_pass1)}")
 
         result = subprocess.run(cmd_pass1, capture_output=True, timeout=300)
         if result.returncode != 0:
             stderr = result.stderr.decode("utf-8", errors="replace")
-            raise RuntimeError(f"ffmpeg pass 1 failed (exit {result.returncode}):\n{stderr[-2000:]}")
+            raise RuntimeError(
+                f"ffmpeg pass 1 failed (exit {result.returncode}):\n{stderr[-2000:]}"
+            )
 
         # Pass 2: burn subtitles
         # Prefer pre-built .ass from captions.py (Whisper path); fall back to SRT conversion
@@ -285,7 +315,9 @@ def assemble_video(
                 _convert_srt_to_ass(srt_path, tmp_ass_converted)
                 tmp_ass = tmp_ass_converted
             except Exception as e:
-                logger.warning(f"[video_assembler] SRT→ASS conversion failed: {e} — skipping subs")
+                logger.warning(
+                    f"[video_assembler] SRT→ASS conversion failed: {e} — skipping subs"
+                )
 
         cta_filter = _build_cta_drawtext(audio_duration)
 
@@ -295,13 +327,20 @@ def assemble_video(
             vf_filter = f"ass='{ass_escaped}',{cta_filter}"
 
             cmd_pass2 = [
-                "ffmpeg", "-y",
-                "-i", str(tmp_nosub),
-                "-vf", vf_filter,
-                "-c:v", "libx264",
-                "-preset", "fast",
-                "-crf", "23",
-                "-c:a", "copy",
+                "ffmpeg",
+                "-y",
+                "-i",
+                str(tmp_nosub),
+                "-vf",
+                vf_filter,
+                "-c:v",
+                "libx264",
+                "-preset",
+                "fast",
+                "-crf",
+                "23",
+                "-c:a",
+                "copy",
                 str(out_path),
             ]
 
@@ -316,33 +355,52 @@ def assemble_video(
                 )
                 # Fallback: burn CTA overlay only (no subtitles)
                 cmd_cta_only = [
-                    "ffmpeg", "-y",
-                    "-i", str(tmp_nosub),
-                    "-vf", cta_filter,
-                    "-c:v", "libx264",
-                    "-preset", "fast",
-                    "-crf", "23",
-                    "-c:a", "copy",
+                    "ffmpeg",
+                    "-y",
+                    "-i",
+                    str(tmp_nosub),
+                    "-vf",
+                    cta_filter,
+                    "-c:v",
+                    "libx264",
+                    "-preset",
+                    "fast",
+                    "-crf",
+                    "23",
+                    "-c:a",
+                    "copy",
                     str(out_path),
                 ]
-                result_cta = subprocess.run(cmd_cta_only, capture_output=True, timeout=300)
+                result_cta = subprocess.run(
+                    cmd_cta_only, capture_output=True, timeout=300
+                )
                 if result_cta.returncode != 0:
                     import shutil
+
                     shutil.copy2(tmp_nosub, out_path)
         else:
             # No subtitles — burn CTA overlay only
             cmd_pass2 = [
-                "ffmpeg", "-y",
-                "-i", str(tmp_nosub),
-                "-vf", cta_filter,
-                "-c:v", "libx264",
-                "-preset", "fast",
-                "-crf", "23",
-                "-c:a", "copy",
+                "ffmpeg",
+                "-y",
+                "-i",
+                str(tmp_nosub),
+                "-vf",
+                cta_filter,
+                "-c:v",
+                "libx264",
+                "-preset",
+                "fast",
+                "-crf",
+                "23",
+                "-c:a",
+                "copy",
                 str(out_path),
             ]
 
-            logger.debug(f"[video_assembler] Pass 2 (CTA only) cmd: {' '.join(cmd_pass2)}")
+            logger.debug(
+                f"[video_assembler] Pass 2 (CTA only) cmd: {' '.join(cmd_pass2)}"
+            )
 
             result2 = subprocess.run(cmd_pass2, capture_output=True, timeout=300)
             if result2.returncode != 0:
@@ -352,6 +410,7 @@ def assemble_video(
                     f"Error: {stderr2[-500:]}"
                 )
                 import shutil
+
                 shutil.copy2(tmp_nosub, out_path)
 
     final_duration = get_audio_duration(out_path)
@@ -386,7 +445,14 @@ def assemble_all_videos(
     output_paths = []
 
     for i, (script, images, audio, srt, duration, ass) in enumerate(
-        zip(scripts, all_image_paths, audio_paths, srt_paths, audio_durations, _ass_paths)
+        zip(
+            scripts,
+            all_image_paths,
+            audio_paths,
+            srt_paths,
+            audio_durations,
+            _ass_paths,
+        )
     ):
         idx = script.get("event_index", i)
         out_path = video_dir / f"{idx}.mp4"
@@ -407,11 +473,14 @@ def assemble_all_videos(
 
             # Also copy to top-level output dir with descriptive name
             event_title = script.get("title", f"event_{idx}")
-            safe_title = "".join(c if c.isalnum() or c in "-_ " else "" for c in event_title)
+            safe_title = "".join(
+                c if c.isalnum() or c in "-_ " else "" for c in event_title
+            )
             safe_title = safe_title.replace(" ", "_")[:50]
             final_output = config.OUTPUT_DIR / f"{slug}_{idx}_{safe_title}.mp4"
 
             import shutil
+
             shutil.copy2(final_path, final_output)
             logger.info(f"[video_assembler] Final output: {final_output}")
 
