@@ -83,14 +83,14 @@ def _make_pil_gradient(title: str, out_path: Path) -> Path:
     if current:
         lines.append(" ".join(current))
 
-    line_h = font_size + 10
-    total_h = len(lines) * line_h
-    y_start = (THUMB_H - total_h) // 2
+    line_h = font_size + 12
+    y_start = 30  # top-aligned, not centered
 
     for i, line in enumerate(lines):
         y = y_start + i * line_h
-        draw.text((52, y + 2), line, font=font, fill=(0, 0, 0))
-        draw.text((50, y), line, font=font, fill=(255, 255, 255))
+        # Black shadow for contrast, then yellow text on top
+        draw.text((52, y + 3), line, font=font, fill=(0, 0, 0))
+        draw.text((50, y), line, font=font, fill=(255, 220, 0))
 
     img.save(str(out_path), "PNG")
     return out_path
@@ -123,8 +123,9 @@ def generate_thumbnail(script: dict, work_dir: Path) -> Path | None:
     location = event.get("location", "")
 
     prompt = (
-        f"Cinematic YouTube thumbnail, {visual_theme}, {year}, {location}, "
-        "dramatic landscape 16:9, epic scale, photorealistic, ultra detailed"
+        f"YouTube thumbnail: dramatic close-up of a shocked or awed historical figure, "
+        f"{visual_theme}, {location}, {year}, bright warm colors, high contrast, "
+        "cinematic lighting, extremely detailed, photorealistic, 16:9, no text"
     )
 
     image_bytes = _fetch_hf_image(prompt)
@@ -136,26 +137,26 @@ def generate_thumbnail(script: dict, work_dir: Path) -> Path | None:
             img = img.resize((THUMB_W, THUMB_H), Image.LANCZOS)
             draw = ImageDraw.Draw(img)
 
-            # Dark overlay on bottom third
+            # Dark overlay on top third (title lives here)
             overlay_h = THUMB_H // 3
-            overlay_y = THUMB_H - overlay_h
             for dy in range(overlay_h):
-                alpha = int(180 * (dy / overlay_h))
-                draw.line(
-                    [(0, overlay_y + dy), (THUMB_W, overlay_y + dy)],
-                    fill=(0, 0, 0, alpha),
-                )
+                alpha = int(160 * (1 - dy / overlay_h))
+                draw.line([(0, dy), (THUMB_W, dy)], fill=(0, 0, 0, alpha))
 
-            font_size = 64
+            font_size = 68
             try:
-                font = ImageFont.truetype("arial.ttf", font_size)
+                font = ImageFont.truetype("arialbd.ttf", font_size)
             except Exception:
-                font = ImageFont.load_default()
+                try:
+                    font = ImageFont.truetype("arial.ttf", font_size)
+                except Exception:
+                    font = ImageFont.load_default()
 
-            text_y = overlay_y + 20
-            short_title = title[:80]
-            draw.text((52, text_y + 2), short_title, font=font, fill=(0, 0, 0))
-            draw.text((50, text_y), short_title, font=font, fill=(255, 255, 255))
+            short_title = title[:60]
+            text_y = 24
+            # Black shadow for contrast, then yellow text on top
+            draw.text((52, text_y + 3), short_title, font=font, fill=(0, 0, 0))
+            draw.text((50, text_y), short_title, font=font, fill=(255, 220, 0))
 
             img.save(str(out_path), "PNG")
             logger.info(f"[thumbnail] HuggingFace thumbnail: {out_path.name}")
