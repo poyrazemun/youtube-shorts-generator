@@ -49,20 +49,6 @@ def _build_cta_drawtext(audio_duration: float) -> str:
     )
 
 
-# Ken Burns pan anchor variants — rotated per slide for visual variety.
-# Each tuple is (x_expr, y_expr) for the zoompan filter viewport origin.
-# At zoom > 1.0, the viewport shows a sub-region of the image; these anchors
-# determine which corner/edge the zoom drifts toward.
-_KEN_BURNS_ANCHORS = [
-    ("iw/2-(iw/zoom/2)", "ih/2-(ih/zoom/2)"),  # center
-    ("0",                "ih/2-(ih/zoom/2)"),    # left edge
-    ("iw-iw/zoom",       "ih/2-(ih/zoom/2)"),   # right edge
-    ("iw/2-(iw/zoom/2)", "0"),                  # top edge
-    ("iw/2-(iw/zoom/2)", "ih-ih/zoom"),         # bottom edge
-]
-_KEN_BURNS_TARGET_ZOOM = 1.04  # 4% zoom — subtle, documentary feel
-
-
 def _image_durations(n: int, total: float) -> list[float]:
     """
     Weighted slide durations: images 1 & 2 each get 25% of total (hook visual
@@ -70,7 +56,7 @@ def _image_durations(n: int, total: float) -> list[float]:
     Falls back to equal distribution for n < 3.
     """
     if n >= 3:
-        front = total * 0.25       # 25% each for slides 0 and 1
+        front = total * 0.25
         rest = (total - 2 * front) / (n - 2)
         return [front, front] + [rest] * (n - 2)
     return [total / n] * n
@@ -80,7 +66,7 @@ def _build_slideshow_filter(
     image_paths: list[Path], audio_duration: float
 ) -> tuple[str, list]:
     """
-    Build ffmpeg filtergraph for image slideshow with Ken Burns effect.
+    Build ffmpeg filtergraph for image slideshow.
     Images 1 & 2 are front-loaded (25% each) to keep the hook visual on screen
     longer; remaining slides share the rest equally.
     Returns (filter_complex string, input_args list).
@@ -93,30 +79,15 @@ def _build_slideshow_filter(
     input_args = []
     for img_path, dur in zip(image_paths, durations):
         input_args.extend(
-            [
-                "-loop",
-                "1",
-                "-t",
-                f"{dur:.3f}",
-                "-i",
-                str(img_path),
-            ]
+            ["-loop", "1", "-t", f"{dur:.3f}", "-i", str(img_path)]
         )
 
-    # Scale to cover full frame (crop instead of pad — no black bars for zoompan),
-    # then apply Ken Burns zoom/pan, then set SAR and fps.
-    # Zoom rate is computed per-slide so the 4% target is always reached regardless
-    # of how long each slide is on screen.
+    # Scale each image to 1080x1920 (pad with black if needed), then concatenate
     scale_parts = []
-    for i, dur in enumerate(durations):
-        x_expr, y_expr = _KEN_BURNS_ANCHORS[i % len(_KEN_BURNS_ANCHORS)]
-        frames = max(int(dur * 24), 1)
-        zoom_rate = (_KEN_BURNS_TARGET_ZOOM - 1.0) / frames
+    for i in range(n):
         scale_parts.append(
-            f"[{i}:v]scale={W}:{H}:force_original_aspect_ratio=increase,"
-            f"crop={W}:{H},"
-            f"zoompan=z='min(zoom+{zoom_rate:.6f},{_KEN_BURNS_TARGET_ZOOM})':"
-            f"d={frames}:x='{x_expr}':y='{y_expr}':s={W}x{H},"
+            f"[{i}:v]scale={W}:{H}:force_original_aspect_ratio=decrease,"
+            f"pad={W}:{H}:(ow-iw)/2:(oh-ih)/2:color=black,"
             f"setsar=1,fps=24[v{i}]"
         )
 
