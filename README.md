@@ -18,7 +18,7 @@ Built entirely with **[Claude Code](https://claude.ai/claude-code)**, using its 
 --auto (run daily via Windows Task Scheduler)
        ↓
   Step 1  event_discovery.py    Claude → 1 strange historical event
-  Step 2  script_generator.py   Claude + DuckDuckGo research → viral script with hook formula + rehook + loopable ending + spoken CTA + SEO metadata
+  Step 2  script_generator.py   Claude + DuckDuckGo research → viral script with hook formula + rehook + loopable ending + SEO metadata
   Step 3  image_generator.py    Replicate FLUX.1-dev → 5 cinematic 9:16 images
   Step 4  tts_generator.py      Kokoro neural TTS → narration audio (fallback: Piper → Coqui → Edge TTS)
   Step 5a captions.py           Whisper / estimation → word-timed subtitles
@@ -147,8 +147,8 @@ Every script uses one of 5 proven hook formulas chosen by Claude for that specif
 
 Hard-banned openers: "Did you know", "In [year]...", any visual reference.
 
-Scripts now follow a 6-beat retention structure: **Hook → Context → Rehook → Twist → Ending fact → CTA**.
-The rehook is designed to reset curiosity midway through the short, the ending fact is prompted to connect back to the opener for better loopability, and the CTA is spoken as part of the narration instead of appearing only as an overlay.
+Scripts now follow a 5-beat retention structure: **Hook → Context → Rehook → Twist → Ending fact**.
+The rehook is designed to reset curiosity midway through the short, and the ending fact is prompted to connect back to the opener for better loopability.
 
 ## Daily Automation (Windows Task Scheduler)
 
@@ -200,7 +200,7 @@ KOKORO_SPEED=1.15          # 0.5=slow · 1.15=default Shorts pacing · 1.5=fast
 - **Resolution**: 1080×1920 (9:16 vertical)
 - **Codec**: H.264, AAC 128kbps, 24fps
 - **Duration**: 20–30 seconds
-- **Subtitles**: Burned in, white bold text, semi-transparent background box, positioned above YouTube Shorts UI, with shorter 3-word cards for faster pacing
+- **Subtitles**: Burned in, white bold text, semi-transparent background box, positioned above YouTube Shorts UI. Whisper captions use shorter 3-word cards for faster pacing, while the estimation fallback keeps larger cards for smoother reading.
 - **CTA Overlay**: "Follow @ThatActuallyHappened11" — white text, top-center, appears in last 3 seconds
 - **Thumbnail**: 1280×720 PNG, uploaded to YouTube
 

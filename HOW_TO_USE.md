@@ -172,7 +172,7 @@ To run daily without touching your PC:
 | Step | Name              | What it does                                                    |
 |------|-------------------|-----------------------------------------------------------------|
 | 1    | Event Discovery   | Claude finds 1 strange real historical event                    |
-| 2    | Script Generation | Claude writes a viral 20–30s script using one of 5 hook formulas plus a rehook, loop-aware ending, and spoken CTA |
+| 2    | Script Generation | Claude writes a viral 20–30s script using one of 5 hook formulas plus a rehook and loop-aware ending |
 | 3    | Image Generation  | Replicate FLUX.1-dev generates 5 cinematic 9:16 images      |
 | 4    | Voice Generation  | Kokoro neural TTS (auto-fallback: Piper → Coqui → Edge TTS)     |
 | 5a   | Captions          | Whisper word timestamps or estimation-based SRT                 |
@@ -186,8 +186,8 @@ All steps are **resumable** — if a step fails, re-run the same command and it 
 ## What Every Video Includes
 
 - **Hook formula**: One of 5 proven formulas (Shocking Fact, False Assumption, Consequence First, Specific Number, Direct Address) chosen by Claude for maximum scroll-stopping power
-- **Mid-video rehook + spoken CTA**: Claude now writes a retention reset midway through the script and ends with a short spoken follow CTA
-- **Subtitles**: Burned in, white bold text with dark background box, positioned above the YouTube Shorts phone UI in shorter 3-word cards for faster pacing
+- **Mid-video rehook**: Claude now writes a retention reset midway through the script so the story re-engages before the payoff
+- **Subtitles**: Burned in, white bold text with dark background box, positioned above the YouTube Shorts phone UI. Whisper captions use shorter 3-word cards for faster pacing, while the estimation fallback keeps larger cards for smoother reading
 - **CTA overlay**: "Follow @ThatActuallyHappened11" — white text, top-center, visible in the last 3 seconds of every video
 - **Background music**: Mixed at low volume if `.mp3` files are present in `assets/music/`
 

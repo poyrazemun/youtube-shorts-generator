@@ -25,7 +25,7 @@ def _seconds_to_srt_timestamp(seconds: float) -> str:
     return f"{hours:02d}:{minutes:02d}:{secs:02d},{millis:03d}"
 
 
-def _chunk_words(words: list[str], max_words_per_line: int = 3) -> list[list[str]]:
+def _chunk_words(words: list[str], max_words_per_line: int = 7) -> list[list[str]]:
     """Split word list into subtitle chunks (max N words each)."""
     chunks = []
     for i in range(0, len(words), max_words_per_line):
@@ -38,7 +38,7 @@ def generate_srt(script: dict, audio_duration: float, output_path: Path) -> Path
     Generate a .srt subtitle file for a script.
 
     Timing is distributed proportionally across words based on audio_duration.
-    Each subtitle card shows 3 words max.
+    Each subtitle card shows 7 words max.
 
     Args:
         script: script dict with 'full_script' key
@@ -73,7 +73,7 @@ def generate_srt(script: dict, audio_duration: float, output_path: Path) -> Path
     seconds_per_word = available_duration / len(words)
 
     # Group into subtitle cards
-    chunks = _chunk_words(words, max_words_per_line=3)
+    chunks = _chunk_words(words, max_words_per_line=7)
 
     srt_entries = []
     current_time = start_buffer
