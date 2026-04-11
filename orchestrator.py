@@ -298,6 +298,19 @@ Examples:
         help="Print the current topic queue and exit",
     )
     mode_group.add_argument(
+        "--clear-topics",
+        action="store_true",
+        dest="clear_topics",
+        help="Wipe the entire topic queue and immediately generate a fresh one",
+    )
+    mode_group.add_argument(
+        "--delete-topic",
+        metavar="ID",
+        default=None,
+        dest="delete_topic",
+        help="Remove a single topic from the queue by its ID",
+    )
+    mode_group.add_argument(
         "--pick",
         metavar="ID",
         default=None,
@@ -341,7 +354,11 @@ Examples:
     args = parser.parse_args()
 
     # ── Validate: manual mode requires --topic and --keyword ──────────────────
-    is_auto_mode = args.auto or args.refresh_topics or args.analytics or args.list_topics or args.pick
+    is_auto_mode = (
+        args.auto or args.refresh_topics or args.analytics
+        or args.list_topics or args.pick
+        or args.clear_topics or args.delete_topic
+    )
     if not is_auto_mode:
         if not args.topic or not args.keyword:
             parser.error(
@@ -435,6 +452,47 @@ Examples:
             print("  " + "─" * 56)
             for t in failed:
                 print(f"      ✗ [id:{t['id']}] {t['topic']} ({t['keyword']})")
+        print()
+        sys.exit(0)
+
+    elif args.clear_topics:
+        print("\n  This will wipe the entire topic queue and generate a fresh one.")
+        confirm = input("  Are you sure? (y/n): ").strip().lower()
+        if confirm != "y":
+            print("  Aborted.")
+            sys.exit(0)
+        topic_discovery.save_queue({"generated_at": None, "topics": []})
+        logger.info("[clear-topics] Queue wiped.")
+        print("  Queue cleared. Generating fresh topics...\n")
+        hints = analytics_mod.get_performance_hints()
+        added = topic_discovery.refresh_queue(performance_hints=hints)
+        queue = topic_discovery.load_queue()
+        pending = sum(1 for t in queue["topics"] if t["status"] == "pending")
+        print(f"  Done: {added} new topics generated. {pending} pending total.\n")
+        print("  " + "─" * 56)
+        for i, t in enumerate(queue["topics"], 1):
+            score = t.get("virality_score", "?")
+            print(f"  {i:>2}. [id:{t['id']}] [{score}/10] {t['topic']} ({t['keyword']})")
+        print()
+        sys.exit(0)
+
+    elif args.delete_topic:
+        queue = topic_discovery.load_queue()
+        match = next((t for t in queue["topics"] if t["id"] == args.delete_topic), None)
+        if match is None:
+            logger.error(
+                f"[delete-topic] ID '{args.delete_topic}' not found. "
+                "Run --list-topics to see valid IDs."
+            )
+            sys.exit(1)
+        print(f"\n  Topic to delete: [{match.get('virality_score', '?')}/10] {match['topic']} ({match['keyword']}) [status: {match['status']}]")
+        confirm = input("  Are you sure? (y/n): ").strip().lower()
+        if confirm != "y":
+            print("  Aborted.")
+            sys.exit(0)
+        queue["topics"] = [t for t in queue["topics"] if t["id"] != args.delete_topic]
+        topic_discovery.save_queue(queue)
+        print(f"  Deleted topic '{args.delete_topic}'.")
         print()
         sys.exit(0)
 

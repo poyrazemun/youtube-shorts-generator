@@ -107,6 +107,12 @@ py -3.12 orchestrator.py --topic "Strange War Stories" --keyword "battle" [--cou
 # Pick a specific topic from the queue by ID (shown in --list-topics)
 py -3.12 orchestrator.py --pick a3f2
 
+# Wipe entire queue and generate a fresh one (asks for confirmation)
+py -3.12 orchestrator.py --clear-topics
+
+# Remove a single topic by ID (asks for confirmation)
+py -3.12 orchestrator.py --delete-topic a3f2
+
 # Flags available on all modes
 --no-upload    skip YouTube upload, save videos locally
 --no-edit      skip prompt editing pause (automation mode)

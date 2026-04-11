@@ -95,6 +95,12 @@ py -3.12 orchestrator.py --pick a3f2
 # Pick a specific topic, skip upload
 py -3.12 orchestrator.py --pick a3f2 --no-upload
 
+# Wipe the entire topic queue and immediately generate a fresh one (asks for confirmation)
+py -3.12 orchestrator.py --clear-topics
+
+# Remove a single topic from the queue by ID (asks for confirmation)
+py -3.12 orchestrator.py --delete-topic a3f2
+
 # Test the pipeline without uploading to YouTube
 py -3.12 orchestrator.py --auto --no-upload
 
