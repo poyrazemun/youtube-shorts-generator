@@ -23,8 +23,6 @@ def _call_claude(client: anthropic.Anthropic, **kwargs) -> anthropic.types.Messa
     return client.messages.create(**kwargs)
 
 
-SUBSCRIBE_CTA = "Follow @ThatActuallyHappened11 for more real history that sounds completely fake."
-
 SYSTEM_PROMPT = """You are a viral YouTube Shorts scriptwriter specializing in
 historical content. You write punchy, engaging scripts that hook viewers in the
 first second, rehook them in the middle, and leave them astonished. Scripts must

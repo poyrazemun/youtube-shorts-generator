@@ -71,6 +71,7 @@ KOKORO_SPEED = float(os.getenv("KOKORO_SPEED", "1.15"))
 SECONDS_PER_IMAGE = 5          # base duration per image slide
 TARGET_DURATION_MIN = 20       # minimum short duration in seconds
 TARGET_DURATION_MAX = 30       # maximum short duration in seconds
+SUBSCRIBE_CTA = "Follow @ThatActuallyHappened11"
 FONT_SIZE = 48
 FONT_COLOR = "white"
 SUBTITLE_OUTLINE_COLOR = "black"

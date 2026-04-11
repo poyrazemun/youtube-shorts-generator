@@ -38,7 +38,7 @@ def generate_srt(script: dict, audio_duration: float, output_path: Path) -> Path
     Generate a .srt subtitle file for a script.
 
     Timing is distributed proportionally across words based on audio_duration.
-    Each subtitle card shows 7 words max.
+    In the estimation fallback, each subtitle card shows 7 words max.
 
     Args:
         script: script dict with 'full_script' key
