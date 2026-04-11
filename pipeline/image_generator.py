@@ -10,6 +10,7 @@ import base64
 import json
 import logging
 import os
+import random
 import re
 import time
 import uuid
@@ -183,9 +184,6 @@ def _build_image_prompts(script: dict) -> list[str]:
 
 def _generate_a1111(prompt: str, out_path: Path) -> Path:
     """Generate one image via A1111 txt2img API."""
-    import urllib.request
-    import json
-
     payload = {
         "prompt": prompt,
         "negative_prompt": config.IMAGE_NEGATIVE_PROMPT,
@@ -274,9 +272,6 @@ def _build_comfyui_workflow(prompt: str) -> dict:
 
 def _generate_comfyui(prompt: str, out_path: Path) -> Path:
     """Generate one image via ComfyUI API."""
-    import urllib.request
-    import json
-
     workflow = _build_comfyui_workflow(prompt)
     client_id = str(uuid.uuid4())
     payload = json.dumps({"prompt": workflow, "client_id": client_id}).encode("utf-8")
@@ -547,8 +542,6 @@ def _generate_pil(prompt: str, out_path: Path, script: dict | None = None) -> Pa
         from PIL import Image, ImageDraw, ImageFilter
     except ImportError:
         raise RuntimeError("Pillow not installed. Run: pip install Pillow")
-
-    import random
 
     W, H = config.IMAGE_WIDTH, config.IMAGE_HEIGHT
     rng = random.Random(hash(prompt) % 2 ** 32)

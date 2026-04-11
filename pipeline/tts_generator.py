@@ -5,9 +5,11 @@ Generates WAV audio from script text.
 Saves to output/<slug>/audio/<event_idx>.wav
 """
 
+import asyncio
 import logging
 import shutil
 import subprocess
+import wave
 from pathlib import Path
 
 import config
@@ -173,8 +175,6 @@ def _generate_edge_tts(text: str, out_path: Path) -> Path:
     except ImportError:
         raise RuntimeError("edge-tts not installed. Run: pip install edge-tts")
 
-    import asyncio
-
     mp3_path = out_path.with_suffix(".mp3")
 
     async def _synthesize() -> None:
@@ -250,7 +250,6 @@ def get_audio_duration(wav_path: Path) -> float:
 
     # Fallback: estimate from WAV header
     try:
-        import wave
         with wave.open(str(wav_path), "r") as wf:
             frames = wf.getnframes()
             rate = wf.getframerate()

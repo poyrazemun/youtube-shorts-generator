@@ -10,6 +10,8 @@ import math
 import re
 from pathlib import Path
 
+from config import OUTPUT_DIR
+
 logger = logging.getLogger(__name__)
 
 # Average reading speed for subtitles (words per second)
@@ -119,8 +121,6 @@ def generate_all_subtitles(
     Generate .srt files for all events.
     Returns list of Path objects to .srt files.
     """
-    from config import OUTPUT_DIR
-
     subtitle_dir = OUTPUT_DIR / slug / "subtitles"
     subtitle_dir.mkdir(parents=True, exist_ok=True)
     srt_paths = []

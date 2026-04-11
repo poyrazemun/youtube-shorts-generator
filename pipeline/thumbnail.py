@@ -3,6 +3,7 @@ YouTube thumbnail generator (1280×720, 16:9).
 Uses HuggingFace FLUX.1-schnell for the base image, Pillow for title overlay.
 Falls back to PIL-only dark gradient + text if HuggingFace fails or token is absent.
 """
+import io
 import json
 import logging
 import os
@@ -103,7 +104,6 @@ def generate_thumbnail(script: dict, work_dir: Path) -> Path | None:
     """
     try:
         from PIL import Image
-        import io
     except ImportError:
         logger.warning("[thumbnail] Pillow not installed — skipping thumbnail.")
         return None

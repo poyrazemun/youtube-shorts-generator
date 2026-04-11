@@ -24,6 +24,21 @@ import re
 import sys
 from pathlib import Path
 
+import config
+from pipeline import analytics as analytics_mod
+from pipeline import topic_discovery
+from pipeline.captions import generate_captions
+from pipeline.event_discovery import discover_events
+from pipeline.image_generator import generate_images
+from pipeline.log import get_logger, set_verbose
+from pipeline.music import select_track
+from pipeline.script_generator import generate_scripts
+from pipeline.state import PipelineState
+from pipeline.thumbnail import generate_thumbnail
+from pipeline.tts_generator import generate_audio, get_audio_duration
+from pipeline.video_assembler import assemble_all_videos
+from pipeline.youtube_uploader import upload_all_videos
+
 
 def _make_slug(topic: str, keyword: str) -> str:
     """Generate a filesystem-safe slug from topic and keyword."""
@@ -66,10 +81,6 @@ def run_pipeline(topic: str, keyword: str, count: int, skip_upload: bool = False
         skip_upload: If True, skip YouTube upload (useful for testing)
         verbose: If True, set console log level to DEBUG
     """
-    import config
-    from pipeline.log import get_logger, set_verbose
-    from pipeline.state import PipelineState
-
     set_verbose(verbose)
     logger = get_logger("orchestrator")
 
@@ -88,7 +99,6 @@ def run_pipeline(topic: str, keyword: str, count: int, skip_upload: bool = False
 
     # ── STEP 1: Event Discovery ────────────────────────────────────────────────
     _print_step(1, "EVENT DISCOVERY")
-    from pipeline.event_discovery import discover_events
     try:
         events = discover_events(topic=topic, keyword=keyword, count=count, slug=slug)
         logger.info(f"Step 1 complete: {len(events)} events discovered.")
@@ -102,7 +112,6 @@ def run_pipeline(topic: str, keyword: str, count: int, skip_upload: bool = False
 
     # ── STEP 2: Script Generation ──────────────────────────────────────────────
     _print_step(2, "SCRIPT GENERATION")
-    from pipeline.script_generator import generate_scripts
     try:
         scripts = generate_scripts(events=events, slug=slug)
         logger.info(f"Step 2 complete: {len(scripts)} scripts generated.")
@@ -120,7 +129,6 @@ def run_pipeline(topic: str, keyword: str, count: int, skip_upload: bool = False
 
     # ── STEP 3: Image Generation ───────────────────────────────────────────────
     _print_step(3, "IMAGE GENERATION")
-    from pipeline.image_generator import generate_images
     try:
         all_image_paths = generate_images(scripts=scripts, slug=slug)
         total_images = sum(len(imgs) for imgs in all_image_paths)
@@ -132,7 +140,6 @@ def run_pipeline(topic: str, keyword: str, count: int, skip_upload: bool = False
 
     # ── STEP 4: TTS Generation ─────────────────────────────────────────────────
     _print_step(4, "VOICE GENERATION (TTS)")
-    from pipeline.tts_generator import generate_audio, get_audio_duration
     try:
         audio_paths = generate_audio(scripts=scripts, slug=slug)
         logger.info(f"Step 4 complete: {len(audio_paths)} audio files generated.")
@@ -153,7 +160,6 @@ def run_pipeline(topic: str, keyword: str, count: int, skip_upload: bool = False
         sys.exit(1)
 
     # ── Background music selection ─────────────────────────────────────────────
-    from pipeline.music import select_track
     music_path = select_track()
     if music_path:
         logger.info(f"Background music: {music_path.name}")
@@ -162,7 +168,6 @@ def run_pipeline(topic: str, keyword: str, count: int, skip_upload: bool = False
 
     # ── STEP 5a: Caption Generation ────────────────────────────────────────────
     _print_step(5, "VIDEO ASSEMBLY (+ Captions)")
-    from pipeline.captions import generate_captions
     subtitle_dir = config.OUTPUT_DIR / slug / "subtitles"
     ass_paths: list = []
     srt_paths: list = []
@@ -181,7 +186,6 @@ def run_pipeline(topic: str, keyword: str, count: int, skip_upload: bool = False
     logger.info(f"Captions generated: {len(srt_paths)} caption files.")
 
     # ── STEP 5b: Video Assembly ────────────────────────────────────────────────
-    from pipeline.video_assembler import assemble_all_videos
     try:
         video_paths = assemble_all_videos(
             scripts=scripts,
@@ -215,7 +219,6 @@ def run_pipeline(topic: str, keyword: str, count: int, skip_upload: bool = False
     _print_step(6, "YOUTUBE UPLOAD")
 
     # Generate thumbnails before upload
-    from pipeline.thumbnail import generate_thumbnail
     thumbnail_dir = config.OUTPUT_DIR / slug / "thumbnails"
     thumbnail_paths: list = []
     for script in scripts:
@@ -228,7 +231,6 @@ def run_pipeline(topic: str, keyword: str, count: int, skip_upload: bool = False
             logger.warning(f"Thumbnail generation failed for event {script.get('event_index', '?')}: {e}")
             thumbnail_paths.append(None)
 
-    from pipeline.youtube_uploader import upload_all_videos
     try:
         upload_results = upload_all_videos(
             video_paths=video_paths,
@@ -337,14 +339,12 @@ Examples:
             parser.error("--count must be between 1 and 20")
 
     # ── Logging init ──────────────────────────────────────────────────────────
-    from pipeline.log import get_logger, set_verbose
     set_verbose(args.verbose)
     logger = get_logger("orchestrator")
 
     # ── Dispatch ──────────────────────────────────────────────────────────────
 
     if args.analytics:
-        from pipeline import analytics as analytics_mod
         result = analytics_mod.fetch_analytics()
         videos = result.get("videos", [])
         print("\n" + "═" * 60)
@@ -374,8 +374,6 @@ Examples:
         sys.exit(0)
 
     elif args.refresh_topics:
-        from pipeline import analytics as analytics_mod
-        from pipeline import topic_discovery
         hints = analytics_mod.get_performance_hints()
         if hints:
             logger.info("[auto] Refreshing topic queue with analytics hints.")
@@ -393,7 +391,6 @@ Examples:
         sys.exit(0)
 
     elif args.list_topics:
-        from pipeline import topic_discovery
         queue = topic_discovery.load_queue()
         topics = queue.get("topics", [])
         pending   = [t for t in topics if t["status"] == "pending"]
@@ -429,7 +426,6 @@ Examples:
         sys.exit(0)
 
     elif args.auto:
-        from pipeline import topic_discovery
         entry = topic_discovery.pick_next_topic()
         if entry is None:
             logger.warning(

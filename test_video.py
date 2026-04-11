@@ -16,7 +16,11 @@ Usage:
 
 import logging
 import sys
+import wave
 from pathlib import Path
+
+from pipeline.video_assembler import assemble_video
+from utils.subtitle_generator import generate_srt
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s  %(message)s")
 
@@ -55,7 +59,6 @@ def _load_test_images(img_dir: Path) -> list[Path]:
 
 def _get_audio_duration(audio_path: Path) -> float:
     """Return duration of a WAV file in seconds."""
-    import wave
     with wave.open(str(audio_path), "rb") as wf:
         frames = wf.getnframes()
         rate   = wf.getframerate()
@@ -91,12 +94,10 @@ def main() -> None:
     print(f"  Audio: {audio_duration:.1f}s")
 
     print("Generating estimation-based SRT...")
-    from utils.subtitle_generator import generate_srt
     srt_path = OUT_DIR / "test.srt"
     generate_srt(TEST_SCRIPT, audio_duration, srt_path)
 
     print("Assembling video...")
-    from pipeline.video_assembler import assemble_video
     assemble_video(
         image_paths=image_paths,
         audio_path=AUDIO_PATH,
@@ -105,7 +106,7 @@ def main() -> None:
         audio_duration=audio_duration,
     )
 
-    print(f"\nDone → {OUT_PATH}")
+    print(f"\nDone: {OUT_PATH}")
 
 
 if __name__ == "__main__":

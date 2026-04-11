@@ -13,6 +13,7 @@ from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
 import config
+from pipeline import topic_discovery
 from pipeline.retry import with_retry
 
 logger = logging.getLogger(__name__)
@@ -50,7 +51,6 @@ def _get_authenticated_service():
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
             try:
-                from google.auth.transport.requests import Request
                 creds.refresh(Request())
             except Exception as e:
                 logger.warning(f"[analytics] Token refresh failed: {e} — re-authorizing.")
@@ -88,7 +88,6 @@ def _collect_uploaded_video_ids() -> list[dict]:
     # Build slug → {keyword, topic} map from the topic queue
     slug_to_meta: dict[str, dict] = {}
     try:
-        from pipeline import topic_discovery
         queue = topic_discovery.load_queue()
         for entry in queue.get("topics", []):
             if entry.get("slug"):

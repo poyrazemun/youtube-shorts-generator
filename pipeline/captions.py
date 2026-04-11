@@ -11,6 +11,9 @@ import logging
 import re
 from pathlib import Path
 
+from config import VIDEO_WIDTH, VIDEO_HEIGHT
+from utils.subtitle_generator import generate_srt
+
 logger = logging.getLogger(__name__)
 
 _WORDS_PER_CARD = 3  # subtitle card size for Whisper path
@@ -77,7 +80,6 @@ def _generate_whisper_captions(
     Returns (ass_path, srt_path).
     """
     import whisper  # type: ignore
-    from config import VIDEO_WIDTH, VIDEO_HEIGHT
 
     logger.info(f"[captions] Loading Whisper model 'base'...")
     model = whisper.load_model("base")
@@ -158,8 +160,6 @@ def generate_captions(
             )
 
     # Estimation fallback using existing subtitle_generator
-    from utils.subtitle_generator import generate_srt
-
     srt_path = work_dir / f"{idx}.srt"
     if srt_path.exists() and srt_path.stat().st_size > 0:
         logger.info(f"[captions] Cache hit (estimation SRT): {srt_path.name}")

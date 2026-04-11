@@ -11,6 +11,7 @@ Output: output/<slug>/video/<event_idx>.mp4 and output/<slug>_<event_idx>.mp4
 
 import logging
 import re
+import shutil
 import subprocess
 import tempfile
 from pathlib import Path
@@ -381,8 +382,6 @@ def assemble_video(
                     cmd_cta_only, capture_output=True, timeout=300
                 )
                 if result_cta.returncode != 0:
-                    import shutil
-
                     shutil.copy2(tmp_nosub, out_path)
         else:
             # No subtitles — burn CTA overlay only
@@ -415,8 +414,6 @@ def assemble_video(
                     f"[video_assembler] CTA overlay failed — copying video without overlay.\n"
                     f"Error: {stderr2[-500:]}"
                 )
-                import shutil
-
                 shutil.copy2(tmp_nosub, out_path)
 
     final_duration = get_audio_duration(out_path)
@@ -484,8 +481,6 @@ def assemble_all_videos(
             )
             safe_title = safe_title.replace(" ", "_")[:50]
             final_output = config.OUTPUT_DIR / f"{slug}_{idx}_{safe_title}.mp4"
-
-            import shutil
 
             shutil.copy2(final_path, final_output)
             logger.info(f"[video_assembler] Final output: {final_output}")
