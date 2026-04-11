@@ -18,7 +18,7 @@ Built entirely with **[Claude Code](https://claude.ai/claude-code)**, using its 
 --auto (run daily via Windows Task Scheduler)
        ↓
   Step 1  event_discovery.py    Claude → 1 strange historical event
-  Step 2  script_generator.py   Claude + DuckDuckGo research → viral script with hook formula + SEO metadata
+  Step 2  script_generator.py   Claude + DuckDuckGo research → viral script with hook formula + rehook + loopable ending + spoken CTA + SEO metadata
   Step 3  image_generator.py    Replicate FLUX.1-dev → 5 cinematic 9:16 images
   Step 4  tts_generator.py      Kokoro neural TTS → narration audio (fallback: Piper → Coqui → Edge TTS)
   Step 5a captions.py           Whisper / estimation → word-timed subtitles
@@ -147,6 +147,9 @@ Every script uses one of 5 proven hook formulas chosen by Claude for that specif
 
 Hard-banned openers: "Did you know", "In [year]...", any visual reference.
 
+Scripts now follow a 6-beat retention structure: **Hook → Context → Rehook → Twist → Ending fact → CTA**.
+The rehook is designed to reset curiosity midway through the short, the ending fact is prompted to connect back to the opener for better loopability, and the CTA is spoken as part of the narration instead of appearing only as an overlay.
+
 ## Daily Automation (Windows Task Scheduler)
 
 Run `--auto` daily and `--refresh-topics` weekly via Windows Task Scheduler. See [HOW_TO_USE.md](HOW_TO_USE.md) for the full setup guide.
@@ -185,7 +188,7 @@ Set in `.env` — no code changes needed:
 ```env
 KOKORO_VOICE=af_heart      # af_heart / am_echo / bf_emma / bm_george / am_liam ...
 KOKORO_LANG_CODE=a         # a=American EN, b=British EN, e=Spanish, f=French, h=Hindi, i=Italian, p=Portuguese
-KOKORO_SPEED=1.0           # 0.5=slow · 1.0=normal · 1.5=fast
+KOKORO_SPEED=1.15          # 0.5=slow · 1.15=default Shorts pacing · 1.5=fast
 ```
 
 > Voice and lang code must match — e.g. `bm_george` requires `KOKORO_LANG_CODE=b`. See [HOW_TO_USE.md](HOW_TO_USE.md) for the full voice list.
@@ -197,7 +200,7 @@ KOKORO_SPEED=1.0           # 0.5=slow · 1.0=normal · 1.5=fast
 - **Resolution**: 1080×1920 (9:16 vertical)
 - **Codec**: H.264, AAC 128kbps, 24fps
 - **Duration**: 20–30 seconds
-- **Subtitles**: Burned in, white bold text, semi-transparent background box, positioned above YouTube Shorts UI
+- **Subtitles**: Burned in, white bold text, semi-transparent background box, positioned above YouTube Shorts UI, with shorter 3–4 word cards for faster pacing
 - **CTA Overlay**: "Follow @ThatActuallyHappened11" — white text, top-center, appears in last 3 seconds
 - **Thumbnail**: 1280×720 PNG, uploaded to YouTube
 

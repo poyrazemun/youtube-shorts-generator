@@ -108,7 +108,7 @@ Voice settings are controlled via your `.env` file:
 ```env
 KOKORO_VOICE=af_heart        # voice name (see table below)
 KOKORO_LANG_CODE=a           # language code (see table below)
-KOKORO_SPEED=1.0             # speaking speed (0.5 = slow, 1.0 = normal, 1.5 = fast)
+KOKORO_SPEED=1.15            # speaking speed (0.5 = slow, 1.15 = default, 1.5 = fast)
 ```
 
 ### Available Voices
@@ -172,7 +172,7 @@ To run daily without touching your PC:
 | Step | Name              | What it does                                                    |
 |------|-------------------|-----------------------------------------------------------------|
 | 1    | Event Discovery   | Claude finds 1 strange real historical event                    |
-| 2    | Script Generation | Claude writes a viral 20–30s script using one of 5 hook formulas |
+| 2    | Script Generation | Claude writes a viral 20–30s script using one of 5 hook formulas plus a rehook, loop-aware ending, and spoken CTA |
 | 3    | Image Generation  | Replicate FLUX.1-dev generates 5 cinematic 9:16 images      |
 | 4    | Voice Generation  | Kokoro neural TTS (auto-fallback: Piper → Coqui → Edge TTS)     |
 | 5a   | Captions          | Whisper word timestamps or estimation-based SRT                 |
@@ -186,7 +186,8 @@ All steps are **resumable** — if a step fails, re-run the same command and it 
 ## What Every Video Includes
 
 - **Hook formula**: One of 5 proven formulas (Shocking Fact, False Assumption, Consequence First, Specific Number, Direct Address) chosen by Claude for maximum scroll-stopping power
-- **Subtitles**: Burned in, white bold text with dark background box, positioned above the YouTube Shorts phone UI
+- **Mid-video rehook + spoken CTA**: Claude now writes a retention reset midway through the script and ends with a short spoken follow CTA
+- **Subtitles**: Burned in, white bold text with dark background box, positioned above the YouTube Shorts phone UI in shorter 3–4 word cards for faster pacing
 - **CTA overlay**: "Follow @ThatActuallyHappened11" — white text, top-center, visible in the last 3 seconds of every video
 - **Background music**: Mixed at low volume if `.mp3` files are present in `assets/music/`
 

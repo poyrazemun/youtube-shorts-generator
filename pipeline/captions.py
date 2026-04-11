@@ -12,7 +12,7 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-_WORDS_PER_CARD = 4  # subtitle card size for Whisper path
+_WORDS_PER_CARD = 3  # subtitle card size for Whisper path
 
 
 def _has_whisper() -> bool:
