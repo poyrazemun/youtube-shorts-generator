@@ -106,6 +106,7 @@ py -3.12 orchestrator.py --topic "Strange War Stories" --keyword "battle" [--cou
 
 # Flags available on all modes
 --no-upload    skip YouTube upload, save videos locally
+--no-edit      skip prompt editing pause (automation mode)
 --verbose      DEBUG-level console logging
 ```
 

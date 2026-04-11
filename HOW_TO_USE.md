@@ -95,6 +95,9 @@ py -3.12 orchestrator.py --topic "Weird Science" --keyword "invention" --no-uplo
 # Verbose debug output (shows all internal steps)
 py -3.12 orchestrator.py --auto --verbose
 
+# Skip prompt editing pause (automation mode — behaves like before this feature was added)
+py -3.12 orchestrator.py --auto --no-edit
+
 # Re-run after a failure (pipeline is resumable — picks up where it left off)
 py -3.12 orchestrator.py --auto
 ```
@@ -231,6 +234,26 @@ growth/               ← marketing guides (Reddit strategy)
 
 ---
 
+## Editing Prompts Before Claude Runs
+
+By default, before each script is generated the pipeline saves the full user prompt to `prompts/<slug>_<event_index>.txt` and pauses:
+
+```
+  Prompt saved: prompts/the_radium_girls_radium_0.txt
+  Edit it now, then press Enter to send to Claude (Enter without editing uses it as-is)...
+```
+
+Open the file in any editor, adjust the wording, add extra constraints, inject context the research missed — then press Enter. The pipeline reads the file back and sends your edited version to Claude. If you leave the file empty, it falls back to the original automatically.
+
+**To skip the pause entirely** (e.g. for unattended automation):
+```bash
+py -3.12 orchestrator.py --auto --no-edit
+```
+
+The `prompts/` folder is gitignored — prompt files are local only.
+
+---
+
 ## Troubleshooting
 
 | Problem | Fix |
@@ -248,3 +271,4 @@ growth/               ← marketing guides (Reddit strategy)
 | Step fails mid-pipeline | Just re-run — completed steps are cached and skipped |
 | CTA overlay missing or clipped | Check ffmpeg version supports drawtext filter (`ffmpeg -filters \| grep drawtext`) |
 | Script cached with old format | Delete `output/<slug>/scripts.json` and re-run to regenerate |
+| Want to skip prompt editing | Add `--no-edit` flag — pipeline skips the pause and sends prompts straight to Claude |

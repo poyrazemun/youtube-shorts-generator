@@ -88,10 +88,33 @@ Return ONLY this JSON (no markdown, no extra text):
 }}"""
 
 
-def generate_scripts(events: list[dict], slug: str) -> list[dict]:
+def _save_prompt(slug: str, idx: int, prompt: str) -> Path:
+    """Write prompt to prompts/<slug>_<idx>.txt and return the path."""
+    prompts_dir = Path("prompts")
+    prompts_dir.mkdir(exist_ok=True)
+    prompt_path = prompts_dir / f"{slug}_{idx}.txt"
+    prompt_path.write_text(prompt, encoding="utf-8")
+    return prompt_path
+
+
+def _load_edited_prompt(prompt_path: Path, original: str) -> str:
+    """Read back the (possibly edited) prompt. Falls back to original if empty or unreadable."""
+    try:
+        text = prompt_path.read_text(encoding="utf-8").strip()
+        return text if text else original
+    except Exception:
+        return original
+
+
+def generate_scripts(events: list[dict], slug: str, no_edit: bool = False) -> list[dict]:
     """
     Generate a viral script for each event using Claude API.
     Returns list of script dicts, one per event. Resumable — skips if cached.
+
+    Args:
+        events: list of event dicts from event_discovery
+        slug: pipeline slug for output paths
+        no_edit: if True, skip prompt-editing pause (automation mode)
     """
     output_path = config.OUTPUT_DIR / slug / "scripts.json"
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -121,6 +144,13 @@ def generate_scripts(events: list[dict], slug: str) -> list[dict]:
             year=event.get("year", "unknown"),
             location=event.get("location", "unknown"),
         ) + research_section
+
+        if not no_edit:
+            prompt_path = _save_prompt(slug, idx, prompt)
+            print(f"\n  Prompt saved: {prompt_path}")
+            print(f"  Edit it now, then press Enter to send to Claude (Enter without editing uses it as-is)...")
+            input()
+            prompt = _load_edited_prompt(prompt_path, prompt)
 
         try:
             message = _call_claude(

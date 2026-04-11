@@ -70,7 +70,7 @@ def _print_results(upload_results: list):
     print()
 
 
-def run_pipeline(topic: str, keyword: str, count: int, skip_upload: bool = False, verbose: bool = False):
+def run_pipeline(topic: str, keyword: str, count: int, skip_upload: bool = False, verbose: bool = False, no_edit: bool = False):
     """
     Execute the full pipeline end-to-end.
 
@@ -80,6 +80,7 @@ def run_pipeline(topic: str, keyword: str, count: int, skip_upload: bool = False
         count: Number of videos to generate
         skip_upload: If True, skip YouTube upload (useful for testing)
         verbose: If True, set console log level to DEBUG
+        no_edit: If True, skip prompt editing pause (automation mode)
     """
     set_verbose(verbose)
     logger = get_logger("orchestrator")
@@ -113,7 +114,7 @@ def run_pipeline(topic: str, keyword: str, count: int, skip_upload: bool = False
     # ── STEP 2: Script Generation ──────────────────────────────────────────────
     _print_step(2, "SCRIPT GENERATION")
     try:
-        scripts = generate_scripts(events=events, slug=slug)
+        scripts = generate_scripts(events=events, slug=slug, no_edit=no_edit)
         logger.info(f"Step 2 complete: {len(scripts)} scripts generated.")
         for s in scripts:
             logger.info(
@@ -320,6 +321,12 @@ Examples:
         help="Skip YouTube upload — just generate and save videos locally",
     )
     parser.add_argument(
+        "--no-edit",
+        action="store_true",
+        dest="no_edit",
+        help="Skip prompt editing pause — send prompts to Claude without stopping (automation mode)",
+    )
+    parser.add_argument(
         "--verbose",
         action="store_true",
         help="Enable DEBUG-level console logging",
@@ -446,6 +453,7 @@ Examples:
                 count=1,
                 skip_upload=args.no_upload,
                 verbose=args.verbose,
+                no_edit=args.no_edit,
             )
             topic_discovery.mark_topic_done(entry["id"], slug)
             logger.info(f"[auto] Topic '{entry['keyword']}' complete.")
@@ -464,6 +472,7 @@ Examples:
             count=args.count,
             skip_upload=args.no_upload,
             verbose=args.verbose,
+            no_edit=args.no_edit,
         )
 
 
