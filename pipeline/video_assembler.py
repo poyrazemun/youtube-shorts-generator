@@ -20,7 +20,7 @@ from pipeline.tts_generator import get_audio_duration
 
 logger = logging.getLogger(__name__)
 
-CTA_OVERLAY_TEXT = "Follow @ThatActuallyHappened11"
+CTA_OVERLAY_TEXT = config.SUBSCRIBE_CTA
 CTA_DURATION_SECS = 3.0  # show in last 3 seconds of video
 
 

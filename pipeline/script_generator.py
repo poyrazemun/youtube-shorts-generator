@@ -23,12 +23,11 @@ def _call_claude(client: anthropic.Anthropic, **kwargs) -> anthropic.types.Messa
     return client.messages.create(**kwargs)
 
 
-SUBSCRIBE_CTA = "Follow @ThatActuallyHappened11 for more real history that sounds completely fake."
-
 SYSTEM_PROMPT = """You are a viral YouTube Shorts scriptwriter specializing in
 historical content. You write punchy, engaging scripts that hook viewers in the
-first second and leave them astonished. Scripts must be exactly 4 parts:
-Hook → Context → Twist → Ending fact.
+first second, rehook them in the middle, and leave them astonished. Scripts must
+be exactly 5 parts:
+Hook → Context → Rehook → Twist → Ending fact.
 Always respond with valid JSON only — no markdown fences, no extra text."""
 
 USER_PROMPT_TEMPLATE = """Write a viral YouTube Shorts script for this historical event:
@@ -38,22 +37,24 @@ Year: {year}
 Location: {location}
 
 STRICT REQUIREMENTS:
-- Total script: 20-30 seconds when read aloud (~80 words MAX)
+- Total script: 20-30 seconds when read aloud (~90 words MAX)
 - Hook: 1 sentence — must stop the scroll in under 2 seconds. Choose the strongest formula for this event:
   • SHOCKING FACT: Lead with the most unbelievable true detail. "A man once sold the Eiffel Tower — twice."
   • FALSE ASSUMPTION: State what everyone believes, then immediately break it. "Everyone thinks Einstein failed math. He didn't — but his teachers still wanted him gone."
   • CONSEQUENCE FIRST: Start with the dramatic outcome, then explain how. "This one telegram started World War One."
   • SPECIFIC NUMBER: A precise number creates instant credibility. "In 1518, 400 people danced non-stop for 2 months — and couldn't stop."
   • DIRECT ADDRESS: Pull the viewer in personally. "You've used this invention today — but its creator was executed for making it."
-- Context: 2 sentences explaining what happened
+- Context: 2 short sentences explaining what happened
+- Rehook: 1 short sentence after the context that renews curiosity and makes the viewer need the payoff
 - Twist: 1 sentence revealing the most unbelievable part
-- Ending fact: 1 sentence with a mind-blowing fact to end on
+- Ending fact: 1 sentence with a mind-blowing fact that connects back to the hook so the ending feels loopable on replay
 
 HOOK RULES:
 - Never start with "Did you know" — it signals low-quality content
 - Never start with "In [year]" — bury the date in context, not the hook
 - The hook must work as audio only — no "look at this" or visual references
 - Under 15 words is ideal; 20 words absolute max
+- The rehook should sound natural, not clickbait, and should land around the midpoint of the story
 
 YouTube SEO requirements:
 - title: Under 60 characters. Front-load the most searchable keyword first (e.g. "Tesla's Stolen Invention That Changed the World | 1900"). Factual, no ALL CAPS. No misleading claims.
@@ -77,9 +78,10 @@ Return ONLY this JSON (no markdown, no extra text):
   "hook_type": "SHOCKING_FACT|FALSE_ASSUMPTION|CONSEQUENCE_FIRST|SPECIFIC_NUMBER|DIRECT_ADDRESS",
   "hook": "Hook sentence here",
   "context": "Context sentences here.",
+  "rehook": "Mid-video curiosity reset here.",
   "twist": "Twist sentence here.",
-  "ending_fact": "Ending fact sentence here.",
-  "full_script": "Complete script as one flowing paragraph (hook + context + twist + ending_fact combined)",
+  "ending_fact": "Ending fact sentence here that loops back to the hook.",
+  "full_script": "Complete script as one flowing paragraph (hook + context + rehook + twist + ending_fact combined)",
   "pin_comment": "A short engaging question specific to this story that will be pinned as the first comment to drive replies (e.g. 'Did you know about this before? What shocked you most? 👇')",
   "word_count": 0,
   "estimated_seconds": 0
@@ -99,6 +101,7 @@ def generate_scripts(events: list[dict], slug: str) -> list[dict]:
         logger.info(f"[script_generator] Cache hit — loading scripts from {output_path}")
         with open(output_path, "r", encoding="utf-8") as f:
             scripts = json.load(f)
+        scripts = [_validate_and_fix_script(script) for script in scripts]
         logger.info(f"[script_generator] Loaded {len(scripts)} scripts from cache.")
         return scripts
 
@@ -179,7 +182,7 @@ def _parse_json_response(text: str) -> dict:
 def _validate_and_fix_script(script: dict) -> dict:
     """Validate script fields and compute word count / estimated duration."""
     required_keys = ["title", "description", "hashtags", "youtube_tags", "hook_type",
-                     "hook", "context", "twist", "ending_fact", "full_script", "pin_comment"]
+                     "hook", "context", "rehook", "twist", "ending_fact", "full_script", "pin_comment"]
 
     list_keys = {"hashtags", "youtube_tags"}
     for key in required_keys:
@@ -194,6 +197,7 @@ def _validate_and_fix_script(script: dict) -> dict:
         full_script = " ".join([
             script.get("hook", ""),
             script.get("context", ""),
+            script.get("rehook", ""),
             script.get("twist", ""),
             script.get("ending_fact", ""),
         ]).strip()
@@ -201,7 +205,8 @@ def _validate_and_fix_script(script: dict) -> dict:
 
     words = full_script.split()
     word_count = len(words)
-    estimated_seconds = round((word_count / 130) * 60)
+    words_per_minute = 130 * max(config.KOKORO_SPEED, 0.1)
+    estimated_seconds = round((word_count / words_per_minute) * 60)
 
     script["word_count"] = word_count
     script["estimated_seconds"] = estimated_seconds
