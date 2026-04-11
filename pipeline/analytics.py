@@ -235,6 +235,31 @@ def _compute_summaries(videos: list[dict]) -> tuple[list[dict], list[dict]]:
     return ranked[:5], ranked[-5:]
 
 
+def _compute_hook_summaries(videos: list[dict]) -> list[dict]:
+    """Return hook types ranked by avg views (only types with ≥2 videos included)."""
+    hook_stats: dict = defaultdict(lambda: {"total_views": 0, "count": 0})
+    for v in videos:
+        ht = v.get("hook_type", "").strip()
+        if not ht:
+            continue
+        hook_stats[ht]["total_views"] += v.get("view_count", 0)
+        hook_stats[ht]["count"] += 1
+
+    return sorted(
+        [
+            {
+                "hook_type": ht,
+                "avg_views": s["total_views"] // max(s["count"], 1),
+                "video_count": s["count"],
+            }
+            for ht, s in hook_stats.items()
+            if s["count"] >= 2
+        ],
+        key=lambda x: x["avg_views"],
+        reverse=True,
+    )
+
+
 # ── Public API ────────────────────────────────────────────────────────────────
 
 def fetch_analytics() -> dict:
@@ -266,9 +291,13 @@ def fetch_analytics() -> dict:
     for v in video_meta:
         meta = enrichment.get(v["video_id"])
         if meta:
-            v["slug"]    = meta.get("slug", v["slug"])
-            v["keyword"] = meta.get("keyword", v["keyword"])
-            v["topic"]   = meta.get("topic", v["topic"])
+            v["slug"]              = meta.get("slug", v["slug"])
+            v["keyword"]           = meta.get("keyword", v["keyword"])
+            v["topic"]             = meta.get("topic", v["topic"])
+            v["hook_type"]         = meta.get("hook_type", "")
+            v["hook"]              = meta.get("hook", "")
+            v["word_count"]        = meta.get("word_count", 0)
+            v["estimated_seconds"] = meta.get("estimated_seconds", 0)
 
     if not video_meta:
         logger.info("[analytics] No videos found on channel.")
@@ -309,6 +338,7 @@ def fetch_analytics() -> dict:
         })
 
     top_kw, worst_kw = _compute_summaries(enriched)
+    hook_summaries = _compute_hook_summaries(enriched)
 
     result = {
         "fetched_at": _utcnow(),
@@ -316,6 +346,7 @@ def fetch_analytics() -> dict:
         "videos": enriched,
         "top_keywords": top_kw,
         "worst_keywords": worst_kw,
+        "hook_type_performance": hook_summaries,
     }
 
     config.ANALYTICS_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -370,11 +401,23 @@ def get_performance_hints() -> str:
             if k["avg_views"] < (top[0]["avg_views"] if top else 0)
         )
 
+        hook_perf = analytics.get("hook_type_performance", [])
+        hook_str = ", ".join(
+            f"{h['hook_type']} ({h['avg_views']:,} avg, {h['video_count']} videos)"
+            for h in hook_perf
+        )
+
         parts = [f"Total channel videos analyzed: {total}."]
         if top_str:
             parts.append(f"Top performing keywords by average views: {top_str}.")
         if worst_str:
             parts.append(f"Worst performing keywords: {worst_str}.")
+        if hook_str:
+            best_hook = hook_perf[0]["hook_type"] if hook_perf else ""
+            parts.append(
+                f"Hook type performance (best to worst): {hook_str}. "
+                f"Prefer {best_hook} hooks when it fits the story."
+            )
 
         return " ".join(parts)
 

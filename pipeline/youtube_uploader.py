@@ -288,6 +288,10 @@ def upload_all_videos(
                 "slug": slug,
                 "topic": topic,
                 "keyword": keyword,
+                "hook_type": script.get("hook_type", ""),
+                "hook": script.get("hook", ""),
+                "word_count": script.get("word_count", 0),
+                "estimated_seconds": script.get("estimated_seconds", 0),
             })
 
         except Exception as e:
