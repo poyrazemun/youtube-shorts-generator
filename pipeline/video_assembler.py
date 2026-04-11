@@ -63,31 +63,41 @@ _KEN_BURNS_ANCHORS = [
 _KEN_BURNS_TARGET_ZOOM = 1.04  # 4% zoom — subtle, documentary feel
 
 
+def _image_durations(n: int, total: float) -> list[float]:
+    """
+    Weighted slide durations: images 1 & 2 each get 25% of total (hook visual
+    stays on screen longer); remaining images share the rest equally.
+    Falls back to equal distribution for n < 3.
+    """
+    if n >= 3:
+        front = total * 0.25       # 25% each for slides 0 and 1
+        rest = (total - 2 * front) / (n - 2)
+        return [front, front] + [rest] * (n - 2)
+    return [total / n] * n
+
+
 def _build_slideshow_filter(
     image_paths: list[Path], audio_duration: float
 ) -> tuple[str, list]:
     """
     Build ffmpeg filtergraph for image slideshow with Ken Burns effect.
-    Each image gets equal screen time to fill the audio duration.
+    Images 1 & 2 are front-loaded (25% each) to keep the hook visual on screen
+    longer; remaining slides share the rest equally.
     Returns (filter_complex string, input_args list).
     """
     n = len(image_paths)
-    per_image = audio_duration / n
+    durations = _image_durations(n, audio_duration)
     W, H = config.VIDEO_WIDTH, config.VIDEO_HEIGHT
-
-    # Zoom rate chosen so we reach _KEN_BURNS_TARGET_ZOOM by the last frame.
-    frames = max(int(per_image * 24), 1)
-    zoom_rate = (_KEN_BURNS_TARGET_ZOOM - 1.0) / frames  # e.g. 0.04/120 ≈ 0.000333
 
     # Build input args: one -loop 1 -t <duration> -i <image> per image
     input_args = []
-    for img_path in image_paths:
+    for img_path, dur in zip(image_paths, durations):
         input_args.extend(
             [
                 "-loop",
                 "1",
                 "-t",
-                f"{per_image:.3f}",
+                f"{dur:.3f}",
                 "-i",
                 str(img_path),
             ]
@@ -95,9 +105,13 @@ def _build_slideshow_filter(
 
     # Scale to cover full frame (crop instead of pad — no black bars for zoompan),
     # then apply Ken Burns zoom/pan, then set SAR and fps.
+    # Zoom rate is computed per-slide so the 4% target is always reached regardless
+    # of how long each slide is on screen.
     scale_parts = []
-    for i in range(n):
+    for i, dur in enumerate(durations):
         x_expr, y_expr = _KEN_BURNS_ANCHORS[i % len(_KEN_BURNS_ANCHORS)]
+        frames = max(int(dur * 24), 1)
+        zoom_rate = (_KEN_BURNS_TARGET_ZOOM - 1.0) / frames
         scale_parts.append(
             f"[{i}:v]scale={W}:{H}:force_original_aspect_ratio=increase,"
             f"crop={W}:{H},"
