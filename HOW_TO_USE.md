@@ -70,6 +70,12 @@ py -3.12 orchestrator.py --auto
 ```
 Picks the highest-scoring pending topic, runs all 6 pipeline steps, uploads to YouTube.
 
+Alternatively, pick a specific topic by its ID from `--list-topics`:
+```bash
+py -3.12 orchestrator.py --pick a3f2
+```
+Runs the full pipeline on that topic. Works with `--no-upload`, `--no-edit`, `--verbose`. If the topic was already marked done or failed, a warning is shown but it runs anyway.
+
 ### Step 4 — Check your analytics (after videos get views)
 ```bash
 py -3.12 orchestrator.py --analytics
@@ -83,6 +89,12 @@ so it generates more topics like your best performers.
 ## Other Commands
 
 ```bash
+# Pick a specific topic by ID and run the full pipeline on it
+py -3.12 orchestrator.py --pick a3f2
+
+# Pick a specific topic, skip upload
+py -3.12 orchestrator.py --pick a3f2 --no-upload
+
 # Test the pipeline without uploading to YouTube
 py -3.12 orchestrator.py --auto --no-upload
 

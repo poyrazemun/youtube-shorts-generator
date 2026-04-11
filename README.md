@@ -104,6 +104,9 @@ py -3.12 orchestrator.py --analytics
 # Manual mode
 py -3.12 orchestrator.py --topic "Strange War Stories" --keyword "battle" [--count N] [--no-upload]
 
+# Pick a specific topic from the queue by ID (shown in --list-topics)
+py -3.12 orchestrator.py --pick a3f2
+
 # Flags available on all modes
 --no-upload    skip YouTube upload, save videos locally
 --no-edit      skip prompt editing pause (automation mode)

@@ -297,6 +297,12 @@ Examples:
         dest="list_topics",
         help="Print the current topic queue and exit",
     )
+    mode_group.add_argument(
+        "--pick",
+        metavar="ID",
+        default=None,
+        help="Run the pipeline on a specific topic by its ID (shown in --list-topics)",
+    )
 
     # ── Manual mode args (required when not using --auto/--refresh-topics/--analytics) ──
     parser.add_argument(
@@ -335,7 +341,7 @@ Examples:
     args = parser.parse_args()
 
     # ── Validate: manual mode requires --topic and --keyword ──────────────────
-    is_auto_mode = args.auto or args.refresh_topics or args.analytics or args.list_topics
+    is_auto_mode = args.auto or args.refresh_topics or args.analytics or args.list_topics or args.pick
     if not is_auto_mode:
         if not args.topic or not args.keyword:
             parser.error(
@@ -416,21 +422,53 @@ Examples:
             for i, t in enumerate(pending + in_prog, 1):
                 status_tag = "[in_progress]" if t["status"] == "in_progress" else ""
                 score = t.get("virality_score", "?")
-                print(f"  {i:>2}. [{score}/10] {t['topic']} ({t['keyword']}) {status_tag}".rstrip())
+                print(f"  {i:>2}. [id:{t['id']}] [{score}/10] {t['topic']} ({t['keyword']}) {status_tag}".rstrip())
         if done:
             print()
             print("  DONE:")
             print("  " + "─" * 56)
             for t in done:
-                print(f"      ✓ {t['topic']} ({t['keyword']})")
+                print(f"      ✓ [id:{t['id']}] {t['topic']} ({t['keyword']})")
         if failed:
             print()
             print("  FAILED:")
             print("  " + "─" * 56)
             for t in failed:
-                print(f"      ✗ {t['topic']} ({t['keyword']})")
+                print(f"      ✗ [id:{t['id']}] {t['topic']} ({t['keyword']})")
         print()
         sys.exit(0)
+
+    elif args.pick:
+        entry = topic_discovery.pick_topic_by_id(args.pick)
+        if entry is None:
+            logger.error(
+                f"[pick] Topic ID '{args.pick}' not found in queue. "
+                "Run --list-topics to see valid IDs."
+            )
+            sys.exit(1)
+
+        slug = _make_slug(entry["topic"], entry["keyword"])
+        logger.info(
+            f"[pick] Running: '{entry['topic']}' / '{entry['keyword']}' "
+            f"(id={entry['id']}, score={entry.get('virality_score', '?')})"
+        )
+        try:
+            run_pipeline(
+                topic=entry["topic"],
+                keyword=entry["keyword"],
+                count=1,
+                skip_upload=args.no_upload,
+                verbose=args.verbose,
+                no_edit=args.no_edit,
+            )
+            topic_discovery.mark_topic_done(entry["id"], slug)
+            logger.info(f"[pick] Topic '{entry['keyword']}' complete.")
+        except SystemExit as exc:
+            topic_discovery.mark_topic_failed(
+                entry["id"], f"pipeline sys.exit({exc.code})"
+            )
+            logger.error(f"[pick] Topic '{entry['keyword']}' failed — marked in queue.")
+            raise
 
     elif args.auto:
         entry = topic_discovery.pick_next_topic()

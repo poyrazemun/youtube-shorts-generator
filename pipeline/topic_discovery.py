@@ -250,6 +250,30 @@ def pick_next_topic() -> dict | None:
     return None
 
 
+def pick_topic_by_id(topic_id: str) -> dict | None:
+    """
+    Find a topic by ID, mark it in_progress, and return it.
+    Returns None if the ID is not found.
+    If the topic is already done or failed, logs a warning but proceeds anyway.
+    """
+    queue = load_queue()
+    for entry in queue["topics"]:
+        if entry["id"] == topic_id:
+            if entry["status"] in ("done", "failed"):
+                logger.warning(
+                    f"[topic_discovery] Topic '{topic_id}' is already '{entry['status']}' — running anyway."
+                )
+            entry["status"] = "in_progress"
+            entry["started_at"] = _utcnow()
+            save_queue(queue)
+            logger.info(
+                f"[topic_discovery] Picked by ID: '{entry['topic']}' / '{entry['keyword']}' "
+                f"(id={entry['id']}, score={entry.get('virality_score', '?')})"
+            )
+            return entry
+    return None
+
+
 def mark_topic_done(topic_id: str, slug: str) -> None:
     """Mark entry as done and record the output slug."""
     queue = load_queue()
