@@ -49,16 +49,35 @@ def _build_cta_drawtext(audio_duration: float) -> str:
     )
 
 
+# Ken Burns pan anchor variants — rotated per slide for visual variety.
+# Each tuple is (x_expr, y_expr) for the zoompan filter viewport origin.
+# At zoom > 1.0, the viewport shows a sub-region of the image; these anchors
+# determine which corner/edge the zoom drifts toward.
+_KEN_BURNS_ANCHORS = [
+    ("iw/2-(iw/zoom/2)", "ih/2-(ih/zoom/2)"),  # center
+    ("0",                "ih/2-(ih/zoom/2)"),    # left edge
+    ("iw-iw/zoom",       "ih/2-(ih/zoom/2)"),   # right edge
+    ("iw/2-(iw/zoom/2)", "0"),                  # top edge
+    ("iw/2-(iw/zoom/2)", "ih-ih/zoom"),         # bottom edge
+]
+_KEN_BURNS_TARGET_ZOOM = 1.04  # 4% zoom — subtle, documentary feel
+
+
 def _build_slideshow_filter(
     image_paths: list[Path], audio_duration: float
 ) -> tuple[str, list]:
     """
-    Build ffmpeg filtergraph for image slideshow.
+    Build ffmpeg filtergraph for image slideshow with Ken Burns effect.
     Each image gets equal screen time to fill the audio duration.
     Returns (filter_complex string, input_args list).
     """
     n = len(image_paths)
     per_image = audio_duration / n
+    W, H = config.VIDEO_WIDTH, config.VIDEO_HEIGHT
+
+    # Zoom rate chosen so we reach _KEN_BURNS_TARGET_ZOOM by the last frame.
+    frames = max(int(per_image * 24), 1)
+    zoom_rate = (_KEN_BURNS_TARGET_ZOOM - 1.0) / frames  # e.g. 0.04/120 ≈ 0.000333
 
     # Build input args: one -loop 1 -t <duration> -i <image> per image
     input_args = []
@@ -74,14 +93,16 @@ def _build_slideshow_filter(
             ]
         )
 
-    # Scale each image to 1080x1920, pad to exact size, then concatenate
+    # Scale to cover full frame (crop instead of pad — no black bars for zoompan),
+    # then apply Ken Burns zoom/pan, then set SAR and fps.
     scale_parts = []
     for i in range(n):
+        x_expr, y_expr = _KEN_BURNS_ANCHORS[i % len(_KEN_BURNS_ANCHORS)]
         scale_parts.append(
-            f"[{i}:v]scale={config.VIDEO_WIDTH}:{config.VIDEO_HEIGHT}:"
-            f"force_original_aspect_ratio=decrease,"
-            f"pad={config.VIDEO_WIDTH}:{config.VIDEO_HEIGHT}:"
-            f"(ow-iw)/2:(oh-ih)/2:color=black,"
+            f"[{i}:v]scale={W}:{H}:force_original_aspect_ratio=increase,"
+            f"crop={W}:{H},"
+            f"zoompan=z='min(zoom+{zoom_rate:.6f},{_KEN_BURNS_TARGET_ZOOM})':"
+            f"d={frames}:x='{x_expr}':y='{y_expr}':s={W}x{H},"
             f"setsar=1,fps=24[v{i}]"
         )
 
