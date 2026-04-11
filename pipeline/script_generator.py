@@ -23,7 +23,7 @@ def _call_claude(client: anthropic.Anthropic, **kwargs) -> anthropic.types.Messa
     return client.messages.create(**kwargs)
 
 
-SUBSCRIBE_CTA = "Follow for more unbelievable history."
+SUBSCRIBE_CTA = "Follow @ThatActuallyHappened11 for more unbelievable history."
 
 SYSTEM_PROMPT = """You are a viral YouTube Shorts scriptwriter specializing in
 historical content. You write punchy, engaging scripts that hook viewers in the
@@ -215,13 +215,14 @@ def _validate_and_fix_script(script: dict) -> dict:
             script.get("ending_fact", ""),
             script.get("cta", ""),
         ]).strip()
-    elif script.get("cta") and script["cta"] not in full_script:
+    elif script.get("cta") and not full_script.rstrip().endswith(script["cta"]):
         full_script = f"{full_script.rstrip()} {script['cta']}".strip()
     script["full_script"] = full_script
 
     words = full_script.split()
     word_count = len(words)
-    estimated_seconds = round((word_count / 130) * 60)
+    words_per_minute = 130 * max(config.KOKORO_SPEED, 0.1)
+    estimated_seconds = round((word_count / words_per_minute) * 60)
 
     script["word_count"] = word_count
     script["estimated_seconds"] = estimated_seconds

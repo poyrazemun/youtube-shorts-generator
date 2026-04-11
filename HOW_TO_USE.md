@@ -187,7 +187,7 @@ All steps are **resumable** — if a step fails, re-run the same command and it 
 
 - **Hook formula**: One of 5 proven formulas (Shocking Fact, False Assumption, Consequence First, Specific Number, Direct Address) chosen by Claude for maximum scroll-stopping power
 - **Mid-video rehook + spoken CTA**: Claude now writes a retention reset midway through the script and ends with a short spoken follow CTA
-- **Subtitles**: Burned in, white bold text with dark background box, positioned above the YouTube Shorts phone UI in shorter 3–4 word cards for faster pacing
+- **Subtitles**: Burned in, white bold text with dark background box, positioned above the YouTube Shorts phone UI in shorter 3-word cards for faster pacing
 - **CTA overlay**: "Follow @ThatActuallyHappened11" — white text, top-center, visible in the last 3 seconds of every video
 - **Background music**: Mixed at low volume if `.mp3` files are present in `assets/music/`
 

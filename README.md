@@ -200,7 +200,7 @@ KOKORO_SPEED=1.15          # 0.5=slow · 1.15=default Shorts pacing · 1.5=fast
 - **Resolution**: 1080×1920 (9:16 vertical)
 - **Codec**: H.264, AAC 128kbps, 24fps
 - **Duration**: 20–30 seconds
-- **Subtitles**: Burned in, white bold text, semi-transparent background box, positioned above YouTube Shorts UI, with shorter 3–4 word cards for faster pacing
+- **Subtitles**: Burned in, white bold text, semi-transparent background box, positioned above YouTube Shorts UI, with shorter 3-word cards for faster pacing
 - **CTA Overlay**: "Follow @ThatActuallyHappened11" — white text, top-center, appears in last 3 seconds
 - **Thumbnail**: 1280×720 PNG, uploaded to YouTube
 
