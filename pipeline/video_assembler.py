@@ -17,6 +17,7 @@ import tempfile
 from pathlib import Path
 
 import config
+from pipeline.scene_spec import ScenePlan
 from pipeline.tts_generator import get_audio_duration
 
 logger = logging.getLogger(__name__)
@@ -97,6 +98,44 @@ def _build_slideshow_filter(
 
     filter_complex = ";".join(scale_parts) + ";" + concat_part
     return filter_complex, input_args
+
+
+def _build_slideshow_filter_from_plan(
+    image_paths: list[Path],
+    plan: ScenePlan,
+) -> tuple[str, list]:
+    """
+    Plan-aware slideshow: each scene gets its own image shown for its own
+    duration (as computed by the scene planner). No motion, no overlays —
+    just static frames concatenated in scene order.
+
+    The value vs. the legacy filter is that durations come from the narrative
+    weights defined in the preset, not from a fixed "25% / 25% / rest equally"
+    heuristic. Hooks naturally linger a little longer, context gets less time.
+    """
+    n_scenes = len(plan.scenes)
+    W, H = config.VIDEO_WIDTH, config.VIDEO_HEIGHT
+
+    input_args: list = []
+    for i, scene in enumerate(plan.scenes):
+        img_path = image_paths[i % len(image_paths)]
+        dur = max(scene.duration, 0.05)
+        input_args.extend(
+            ["-loop", "1", "-t", f"{dur:.3f}", "-i", str(img_path)]
+        )
+
+    filter_parts: list[str] = []
+    for i in range(n_scenes):
+        filter_parts.append(
+            f"[{i}:v]scale={W}:{H}:force_original_aspect_ratio=decrease,"
+            f"pad={W}:{H}:(ow-iw)/2:(oh-ih)/2:color=black,"
+            f"setsar=1,fps=24[v{i}]"
+        )
+
+    concat_inputs = "".join(f"[v{i}]" for i in range(n_scenes))
+    filter_parts.append(f"{concat_inputs}concat=n={n_scenes}:v=1:a=0[video_raw]")
+
+    return ";".join(filter_parts), input_args
 
 
 def _convert_srt_to_ass(srt_path: Path, ass_path: Path) -> Path:
@@ -201,6 +240,7 @@ def assemble_video(
     audio_duration: float,
     ass_path: Path | None = None,
     music_path: Path | None = None,
+    plan: ScenePlan | None = None,
 ) -> Path:
     """
     Assemble a single video from images + audio + subtitles.
@@ -233,9 +273,18 @@ def assemble_video(
         f"{audio_duration:.1f}s audio → {out_path.name}"
     )
 
-    filter_complex, image_input_args = _build_slideshow_filter(
-        image_paths, audio_duration
-    )
+    if plan is not None and plan.scenes:
+        filter_complex, image_input_args = _build_slideshow_filter_from_plan(
+            image_paths, plan
+        )
+        logger.info(
+            f"[video_assembler] Plan-driven render: preset={plan.preset}, "
+            f"scenes={len(plan.scenes)}, durations={[round(s.duration,1) for s in plan.scenes]}"
+        )
+    else:
+        filter_complex, image_input_args = _build_slideshow_filter(
+            image_paths, audio_duration
+        )
 
     # We need to add subtitle burn-in as a second filter pass to avoid
     # complexities with subtitles in the main filtergraph (path escaping issues)
@@ -433,6 +482,7 @@ def assemble_all_videos(
     slug: str,
     ass_paths: list[Path | None] | None = None,
     music_path: Path | None = None,
+    scene_plans: list[ScenePlan] | None = None,
 ) -> list[Path]:
     """
     Assemble videos for all events. Returns list of output .mp4 paths.
@@ -444,6 +494,12 @@ def assemble_all_videos(
 
     # Normalise ass_paths to a list aligned with scripts
     _ass_paths = ass_paths if ass_paths else [None] * len(scripts)
+
+    # Index plans by event_index so we tolerate missing/reordered plans
+    plans_by_idx: dict[int, ScenePlan] = {}
+    if scene_plans:
+        for p in scene_plans:
+            plans_by_idx[p.event_index] = p
 
     output_paths = []
 
@@ -459,6 +515,7 @@ def assemble_all_videos(
     ):
         idx = script.get("event_index", i)
         out_path = video_dir / f"{idx}.mp4"
+        plan = plans_by_idx.get(idx)
 
         logger.info(f"[video_assembler] Assembling video {idx + 1}/{len(scripts)}...")
 
@@ -471,6 +528,7 @@ def assemble_all_videos(
                 audio_duration=duration,
                 ass_path=ass,
                 music_path=music_path,
+                plan=plan,
             )
             output_paths.append(final_path)
 

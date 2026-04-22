@@ -32,6 +32,8 @@ from pipeline.event_discovery import discover_events
 from pipeline.image_generator import generate_images
 from pipeline.log import get_logger, set_verbose
 from pipeline.music import select_track
+from pipeline.presets import DEFAULT_PRESET, list_presets
+from pipeline.scene_planner import plan_all as plan_all_scenes
 from pipeline.script_generator import generate_scripts
 from pipeline.state import PipelineState
 from pipeline.thumbnail import generate_thumbnail
@@ -70,7 +72,7 @@ def _print_results(upload_results: list):
     print()
 
 
-def run_pipeline(topic: str, keyword: str, count: int, skip_upload: bool = False, verbose: bool = False, no_edit: bool = False):
+def run_pipeline(topic: str, keyword: str, count: int, skip_upload: bool = False, verbose: bool = False, no_edit: bool = False, preset: str | None = None):
     """
     Execute the full pipeline end-to-end.
 
@@ -128,10 +130,29 @@ def run_pipeline(topic: str, keyword: str, count: int, skip_upload: bool = False
         state.fail(0, "scripts", str(e))
         sys.exit(1)
 
+    # ── STEP 2.5: Scene Planning (pre-render — uses estimated durations) ───────
+    active_preset = preset or config.DEFAULT_SCENE_PRESET
+    logger.info(f"[scene_planner] Using preset: {active_preset}")
+    try:
+        estimated_durations = [
+            float(s.get("estimated_seconds") or 25.0) for s in scripts
+        ]
+        scene_plans = plan_all_scenes(
+            scripts=scripts,
+            audio_durations=estimated_durations,
+            slug=slug,
+            preset_name=active_preset,
+        )
+    except Exception as e:
+        logger.warning(f"[scene_planner] Planning failed ({e}) — falling back to legacy render path")
+        scene_plans = []
+
     # ── STEP 3: Image Generation ───────────────────────────────────────────────
     _print_step(3, "IMAGE GENERATION")
     try:
-        all_image_paths = generate_images(scripts=scripts, slug=slug)
+        all_image_paths = generate_images(
+            scripts=scripts, slug=slug, scene_plans=scene_plans or None
+        )
         total_images = sum(len(imgs) for imgs in all_image_paths)
         logger.info(f"Step 3 complete: {total_images} images generated across {len(scripts)} events.")
     except Exception as e:
@@ -159,6 +180,24 @@ def run_pipeline(topic: str, keyword: str, count: int, skip_upload: bool = False
     except Exception as e:
         logger.error(f"Step 4 FAILED: {e}")
         sys.exit(1)
+
+    # ── Re-plan scenes with actual audio durations + resolved image paths ─────
+    if scene_plans:
+        try:
+            scene_plans = plan_all_scenes(
+                scripts=scripts,
+                audio_durations=audio_durations,
+                slug=slug,
+                preset_name=active_preset,
+            )
+            # Attach the resolved image paths so scene_plans/<idx>.json is a
+            # fully self-describing artifact of what was rendered.
+            for plan, imgs in zip(scene_plans, all_image_paths):
+                for scene, img in zip(plan.scenes, imgs):
+                    scene.image_path = str(img)
+                plan.save(config.OUTPUT_DIR / slug / "scene_plans" / f"{plan.event_index}.json")
+        except Exception as e:
+            logger.warning(f"[scene_planner] Re-plan after TTS failed ({e}) — continuing")
 
     # ── Background music selection ─────────────────────────────────────────────
     music_path = select_track()
@@ -197,6 +236,7 @@ def run_pipeline(topic: str, keyword: str, count: int, skip_upload: bool = False
             slug=slug,
             ass_paths=ass_paths,
             music_path=music_path,
+            scene_plans=scene_plans or None,
         )
         logger.info(f"Step 5 complete: {len(video_paths)} videos assembled.")
         for i, (vp, s) in enumerate(zip(video_paths, scripts)):
@@ -349,6 +389,13 @@ Examples:
         "--verbose",
         action="store_true",
         help="Enable DEBUG-level console logging",
+    )
+    parser.add_argument(
+        "--preset",
+        default=None,
+        choices=list_presets(),
+        help=f"Scene preset (default: {DEFAULT_PRESET}). "
+             f"Controls motion, overlays, and image-prompt style per scene role.",
     )
 
     args = parser.parse_args()
@@ -518,6 +565,7 @@ Examples:
                 skip_upload=args.no_upload,
                 verbose=args.verbose,
                 no_edit=args.no_edit,
+                preset=args.preset,
             )
             topic_discovery.mark_topic_done(entry["id"], slug)
             logger.info(f"[pick] Topic '{entry['keyword']}' complete.")
@@ -550,6 +598,7 @@ Examples:
                 skip_upload=args.no_upload,
                 verbose=args.verbose,
                 no_edit=args.no_edit,
+                preset=args.preset,
             )
             topic_discovery.mark_topic_done(entry["id"], slug)
             logger.info(f"[auto] Topic '{entry['keyword']}' complete.")
@@ -569,6 +618,7 @@ Examples:
             skip_upload=args.no_upload,
             verbose=args.verbose,
             no_edit=args.no_edit,
+            preset=args.preset,
         )
 
 

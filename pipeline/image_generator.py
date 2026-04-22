@@ -631,25 +631,48 @@ def _generate_pil(prompt: str, out_path: Path, script: dict | None = None) -> Pa
 
 # ── Main Entry Point ──────────────────────────────────────────────────────────
 
-def generate_images(scripts: list[dict], slug: str) -> list[list[Path]]:
+def generate_images(
+    scripts: list[dict],
+    slug: str,
+    scene_plans: list | None = None,
+) -> list[list[Path]]:
     """
-    Generate 5 images per script/event.
+    Generate images per script/event.
+
+    If `scene_plans` is provided, image prompts come from each scene's
+    `image_prompt` (produced by pipeline.scene_planner, role-aware + preset-aware).
+    Otherwise falls back to the legacy 5-shot hardcoded prompt set.
+
     Returns list of lists: [[img0, img1, ...], [img0, img1, ...], ...]
     Resumable — skips already-generated images.
     """
     backend = detect_backend()
     all_image_paths = []
 
+    # Index plans by event_index for safe alignment (scripts may be out of order)
+    plans_by_idx = {}
+    if scene_plans:
+        for p in scene_plans:
+            plans_by_idx[p.event_index] = p
+
     for script in scripts:
         idx = script.get("event_index", scripts.index(script))
         img_dir = config.OUTPUT_DIR / slug / "images" / str(idx)
         img_dir.mkdir(parents=True, exist_ok=True)
 
-        prompts = _build_image_prompts(script)
+        plan = plans_by_idx.get(idx)
+        if plan is not None:
+            prompts = [scene.image_prompt for scene in plan.scenes]
+            logger.info(
+                f"[image_generator] Using scene plan ({len(prompts)} scenes, "
+                f"preset={plan.preset}) for event {idx}"
+            )
+        else:
+            prompts = _build_image_prompts(script)
         event_images = []
 
         logger.info(
-            f"[image_generator] Generating {config.IMAGES_PER_EVENT} images "
+            f"[image_generator] Generating {len(prompts)} images "
             f"for event {idx} using {backend}..."
         )
 

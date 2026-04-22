@@ -205,6 +205,84 @@ KOKORO_SPEED=1.15          # 0.5=slow · 1.15=default Shorts pacing · 1.5=fast
 
 ---
 
+## Scene Planning & Presets
+
+Between script generation and rendering, a lightweight **scene planning layer**
+converts each script into an explicit, inspectable `ScenePlan`. This makes the
+pipeline less slideshow-like by giving every narrative beat its own framing,
+motion, and overlays.
+
+```
+script  →  scene plan  →  image / render inputs  →  video assembly
+```
+
+### Scene roles
+
+The five semantic parts of every script each become a scene with a distinct
+visual treatment:
+
+| Role      | Intent                                          |
+|-----------|-------------------------------------------------|
+| `hook`    | Strong, immediate establishing frame            |
+| `context` | Explanatory, informative                        |
+| `rehook`  | Mid-story curiosity reset                       |
+| `twist`   | Heightened contrast / drama                     |
+| `ending`  | Clean closing frame with negative space for CTA |
+
+Each scene carries: `role`, `text`, `duration`, `image_prompt`, `motion`, and
+a list of `overlays`. Plans are saved to `output/<slug>/scene_plans/<idx>.json`
+and can be hand-edited between runs (the video step reads them back).
+
+### Presets (`--preset`)
+
+Presets bundle motion + overlay + prompt-style choices per role.
+
+| Preset              | Feel                                                          |
+|---------------------|---------------------------------------------------------------|
+| `documentary_clean` | Archival, gentle motion, restrained overlays (default)        |
+| `dramatic_history`  | Chiaroscuro, strong zooms, bold fact badges on twists         |
+| `viral_fact_card`   | TikTok-style, overlay-heavy, punchy zooms                     |
+
+```bash
+python orchestrator.py --auto --preset dramatic_history
+python orchestrator.py --topic "Strange Moments" --keyword war --preset viral_fact_card
+```
+
+Omitting `--preset` uses `config.DEFAULT_SCENE_PRESET` (defaults to
+`documentary_clean`). All existing CLI flags continue to work unchanged.
+
+### Motion presets
+
+Implemented via ffmpeg `zoompan`:
+
+- `static_hold` — locked frame
+- `slow_push_in` — gradual 1.00 → 1.08 zoom
+- `drift_left` / `drift_right` — slow horizontal pans
+- `dramatic_zoom` — 1.00 → 1.18 with slight upward drift
+
+### Overlay blocks
+
+Pure ffmpeg `drawtext`/`drawbox` fragments, selected per scene by the preset:
+
+- `title_card` — top or center title banner (defaults on hook scenes)
+- `fact_badge` — corner badge with variants `mono` / `pop` / `alert`
+- `era_tag` — year/location chip (defaults on context scenes)
+
+Blocks are declarative (`{"block": "title_card", "params": {...}}`) and live in
+`pipeline/overlay_blocks.py`. Adding a new block = one function + one registry
+entry. The renderer fails open: a broken block produces an empty fragment
+instead of killing the video.
+
+### Extending
+
+- **New preset** — add a `Preset` to `pipeline/presets.py` and register it in
+  `PRESETS`. It's picked up by `--preset` automatically.
+- **New motion** — add an entry to `_PRESETS` in `pipeline/motion.py`.
+- **New overlay block** — add a function + register it in `BLOCKS` in
+  `pipeline/overlay_blocks.py`.
+
+---
+
 ## Output Format
 
 - **Resolution**: 1080×1920 (9:16 vertical)
@@ -223,7 +301,8 @@ output/
   <slug>/
     events.json       step 1 — discovered event
     scripts.json      step 2 — script + SEO metadata + hook_type
-    images/           step 3 — 5 PNG images
+    scene_plans/      step 2.5 — per-event ScenePlan JSON (scenes, motion, overlays)
+    images/           step 3 — one PNG per scene (role-aware prompts)
     audio/            step 4 — narration WAV
     subtitles/        step 5a — .ass + .srt caption files
     video/            step 5b — assembled MP4

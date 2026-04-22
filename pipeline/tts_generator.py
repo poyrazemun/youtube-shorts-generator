@@ -9,11 +9,17 @@ import asyncio
 import logging
 import shutil
 import subprocess
+import warnings
 import wave
 from pathlib import Path
 
 import config
 from pipeline.retry import with_retry
+
+# Silence noisy upstream warnings from Kokoro's PyTorch model internals.
+# These are harmless and originate in third-party code we don't control.
+warnings.filterwarnings("ignore", message=".*dropout option adds dropout.*")
+warnings.filterwarnings("ignore", message=".*weight_norm.*is deprecated.*")
 
 logger = logging.getLogger(__name__)
 
@@ -70,7 +76,12 @@ def _generate_kokoro(text: str, out_path: Path) -> Path:
     import soundfile as sf
     import numpy as np
 
-    pipeline = KPipeline(lang_code=config.KOKORO_LANG_CODE)
+    # Pass repo_id explicitly to silence the "Defaulting repo_id" warning
+    # from kokoro — the value here is the same one kokoro would default to.
+    pipeline = KPipeline(
+        lang_code=config.KOKORO_LANG_CODE,
+        repo_id="hexgrad/Kokoro-82M",
+    )
     generator = pipeline(text, voice=config.KOKORO_VOICE, speed=config.KOKORO_SPEED)
 
     chunks = []
