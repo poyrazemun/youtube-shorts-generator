@@ -82,6 +82,11 @@ SECONDS_PER_IMAGE = 5  # base duration per image slide
 TARGET_DURATION_MIN = 20  # minimum short duration in seconds
 TARGET_DURATION_MAX = 30  # maximum short duration in seconds
 SUBSCRIBE_CTA = "Follow @ThatActuallyHappened11"
+# Global nudge applied to every subtitle card's start/end timestamps.
+# Negative = subtitles appear earlier (compensate for "late" captions).
+# Positive = subtitles appear later (compensate for "early" captions).
+# Tune in 0.1s increments via env var, e.g. SUBTITLE_TIME_OFFSET=-0.2
+SUBTITLE_TIME_OFFSET = float(os.getenv("SUBTITLE_TIME_OFFSET", "0.0"))
 FONT_SIZE = 48
 FONT_COLOR = "white"
 SUBTITLE_OUTLINE_COLOR = "black"
@@ -99,6 +104,11 @@ YOUTUBE_SCOPES = [
 # ── Logging ───────────────────────────────────────────────────────────────────
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 LOG_FILE = LOGS_DIR / "pipeline.log"
+
+# ── Scene Planning (Phase 1 architecture) ─────────────────────────────────────
+# Default preset used when --preset is not passed. Must be a key of
+# pipeline.presets.PRESETS.
+DEFAULT_SCENE_PRESET = os.getenv("DEFAULT_SCENE_PRESET", "documentary_clean")
 
 # ── Tier 3: Automation ────────────────────────────────────────────────────────
 TOPICS_QUEUE_PATH = BASE_DIR / "topics_queue.json"

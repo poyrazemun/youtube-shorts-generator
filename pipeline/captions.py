@@ -11,7 +11,7 @@ import logging
 import re
 from pathlib import Path
 
-from config import VIDEO_WIDTH, VIDEO_HEIGHT
+from config import SUBTITLE_TIME_OFFSET, VIDEO_WIDTH, VIDEO_HEIGHT
 from utils.subtitle_generator import generate_srt
 
 logger = logging.getLogger(__name__)
@@ -111,8 +111,10 @@ def _generate_whisper_captions(
 
     for i in range(0, len(words), _WORDS_PER_CARD):
         card_words = words[i : i + _WORDS_PER_CARD]
-        start = card_words[0]["start"]
-        end = card_words[-1]["end"]
+        # SUBTITLE_TIME_OFFSET shifts captions earlier to compensate for
+        # Whisper's tendency to land word-start timestamps after the onset.
+        start = max(0.0, card_words[0]["start"] + SUBTITLE_TIME_OFFSET)
+        end = max(start + 0.05, card_words[-1]["end"] + SUBTITLE_TIME_OFFSET)
         text = " ".join(w["word"] for w in card_words)
         text = text.replace("{", r"\{").replace("}", r"\}")
 

@@ -10,7 +10,7 @@ import math
 import re
 from pathlib import Path
 
-from config import OUTPUT_DIR
+from config import OUTPUT_DIR, SUBTITLE_TIME_OFFSET
 
 logger = logging.getLogger(__name__)
 
@@ -85,11 +85,20 @@ def generate_srt(script: dict, audio_duration: float, output_path: Path) -> Path
         # Add a tiny gap between cards (0.05s)
         gap = 0.05
 
-        start_time = current_time
-        end_time = current_time + chunk_duration - gap
+        # Compute the RAW card boundaries on the audio timeline first, and
+        # advance `current_time` using those raw values. The offset must only
+        # shift the written-out timestamps — folding it into `current_time`
+        # would compound the shift on every subsequent card and drift the
+        # later subtitles further and further off-sync.
+        raw_start = current_time
+        raw_end = current_time + chunk_duration - gap
 
-        # Clamp end time to audio duration
+        start_time = max(0.0, raw_start + SUBTITLE_TIME_OFFSET)
+        end_time = raw_end + SUBTITLE_TIME_OFFSET
+
+        # Clamp to sensible bounds
         end_time = min(end_time, audio_duration - 0.1)
+        end_time = max(end_time, start_time + 0.1)
 
         subtitle_text = " ".join(chunk)
 
@@ -99,7 +108,9 @@ def generate_srt(script: dict, audio_duration: float, output_path: Path) -> Path
             f"{subtitle_text}\n"
         )
 
-        current_time = end_time + gap
+        # Advance using raw end so the NEXT card's timing stays anchored to
+        # the audio, independent of the display-shift offset.
+        current_time = raw_end + gap
 
     srt_content = "\n".join(srt_entries)
     output_path.write_text(srt_content, encoding="utf-8")
