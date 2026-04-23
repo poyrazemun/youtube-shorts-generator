@@ -6,16 +6,12 @@ Saves to output/<slug>/subtitles/<event_idx>.srt
 """
 
 import logging
-import math
 import re
 from pathlib import Path
 
-from config import OUTPUT_DIR, SUBTITLE_TIME_OFFSET
+from config import SUBTITLE_TIME_OFFSET
 
 logger = logging.getLogger(__name__)
-
-# Average reading speed for subtitles (words per second)
-WORDS_PER_SECOND = 130 / 60  # ~2.17 wps
 
 
 def _seconds_to_srt_timestamp(seconds: float) -> str:
@@ -120,33 +116,3 @@ def generate_srt(script: dict, audio_duration: float, output_path: Path) -> Path
         f"for {len(words)} words ({audio_duration:.1f}s audio) → {output_path}"
     )
     return output_path
-
-
-def generate_all_subtitles(
-    scripts: list[dict],
-    audio_paths: list[Path],
-    slug: str,
-    audio_durations: list[float],
-) -> list[Path]:
-    """
-    Generate .srt files for all events.
-    Returns list of Path objects to .srt files.
-    """
-    subtitle_dir = OUTPUT_DIR / slug / "subtitles"
-    subtitle_dir.mkdir(parents=True, exist_ok=True)
-    srt_paths = []
-
-    for script, audio_path, duration in zip(scripts, audio_paths, audio_durations):
-        idx = script.get("event_index", scripts.index(script))
-        srt_path = subtitle_dir / f"{idx}.srt"
-
-        if srt_path.exists() and srt_path.stat().st_size > 0:
-            logger.info(f"[subtitle_generator] Cache hit: {srt_path.name}")
-            srt_paths.append(srt_path)
-            continue
-
-        logger.info(f"[subtitle_generator] Generating subtitles for event {idx}...")
-        generate_srt(script, duration, srt_path)
-        srt_paths.append(srt_path)
-
-    return srt_paths

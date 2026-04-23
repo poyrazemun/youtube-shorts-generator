@@ -8,8 +8,8 @@ Install Whisper (optional): pip install openai-whisper
 """
 
 import logging
-import re
 from pathlib import Path
+from typing import cast
 
 from config import SUBTITLE_TIME_OFFSET, VIDEO_WIDTH, VIDEO_HEIGHT
 from utils.subtitle_generator import generate_srt
@@ -21,7 +21,7 @@ _WORDS_PER_CARD = 3  # subtitle card size for Whisper path
 
 def _has_whisper() -> bool:
     try:
-        import whisper  # noqa: F401
+        import whisper  # type: ignore[import-not-found]  # noqa: F401
 
         return True
     except ImportError:
@@ -79,16 +79,16 @@ def _generate_whisper_captions(
     Transcribe audio with Whisper word timestamps → ASS + SRT files.
     Returns (ass_path, srt_path).
     """
-    import whisper  # type: ignore
+    import whisper  # type: ignore[import-not-found]
 
-    logger.info(f"[captions] Loading Whisper model 'base'...")
+    logger.info("[captions] Loading Whisper model 'base'...")
     model = whisper.load_model("base")
-    result = model.transcribe(str(audio_path), word_timestamps=True)
+    result = cast(dict, model.transcribe(str(audio_path), word_timestamps=True))
 
     # Flatten word timestamps from all segments
     words = []
-    for seg in result.get("segments", []):
-        for w in seg.get("words", []):
+    for seg in result.get("segments", []) or []:
+        for w in seg.get("words", []) or []:
             words.append(
                 {
                     "word": w["word"].strip(),

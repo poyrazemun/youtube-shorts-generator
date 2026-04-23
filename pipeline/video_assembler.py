@@ -294,7 +294,10 @@ def assemble_video(
         tmp_nosub = Path(tmpdir) / "nosub.mp4"
 
         # Pass 1: assemble slideshow + audio (no subtitles yet)
-        n = len(image_paths)
+        # Derive the image-input count from the actual ffmpeg args the filter
+        # builder emitted — in plan-driven mode one `-i` is added per scene,
+        # which may differ from len(image_paths).
+        n = sum(1 for a in image_input_args if a == "-i")
         cmd_pass1 = [
             "ffmpeg",
             "-y",

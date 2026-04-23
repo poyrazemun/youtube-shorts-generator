@@ -7,9 +7,9 @@ Saves output to output/<slug>/events.json (resumable).
 import json
 import logging
 import re
-from pathlib import Path
 
 import anthropic
+from anthropic.types import TextBlock
 
 import config
 from pipeline.retry import with_retry
@@ -82,7 +82,16 @@ def discover_events(topic: str, keyword: str, count: int, slug: str) -> list[dic
             system=SYSTEM_PROMPT,
             messages=[{"role": "user", "content": prompt}],
         )
-        raw_text = message.content[0].text.strip()
+        text_parts = [
+            block.text for block in message.content
+            if isinstance(block, TextBlock)
+        ]
+        if not text_parts:
+            raise ValueError(
+                f"Claude returned no text content "
+                f"(stop_reason={message.stop_reason})"
+            )
+        raw_text = "".join(text_parts).strip()
         logger.debug(f"[event_discovery] Raw Claude response:\n{raw_text}")
 
         events = _parse_json_response(raw_text)

@@ -8,24 +8,21 @@ sum exactly to the audio duration.
 This is the only place that knows how to map narrative roles to:
   - relative durations (from the preset's role weights)
   - image prompts (role-aware, using the preset's style tokens)
-  - motion presets and overlay blocks
 
 The resulting ScenePlan is saved as JSON and consumed by both the image
-generator (for prompts) and the video assembler (for motion + overlays).
+generator (for prompts) and the video assembler (for scene durations).
 """
 
 from __future__ import annotations
 
 import logging
 import re
-from pathlib import Path
 from typing import Any
 
 import config
 from pipeline.presets import Preset, get_preset
 from pipeline.scene_spec import (
     ALL_ROLES,
-    OverlayBlockSpec,
     ScenePlan,
     SceneRole,
     SceneSpec,
@@ -157,27 +154,12 @@ def plan_scenes(
         fragment = _visual_fragment(text)
         img_prompt = _build_image_prompt(role, fragment, event, preset)
 
-        # Overlays: clone the preset's declared overlays and enrich their
-        # params with event-level info when the block expects it.
-        overlays: list[OverlayBlockSpec] = []
-        for ov in role_dir.overlays:
-            params = dict(ov.get("params", {}))
-            block = ov["block"]
-            if block == "title_card" and "text" not in params:
-                params["text"] = script.get("title", "")
-            if block == "era_tag":
-                params.setdefault("year", str(event.get("year", "")))
-                params.setdefault("location", str(event.get("location", "")))
-            overlays.append(OverlayBlockSpec(block=block, params=params))
-
         scenes.append(SceneSpec(
             index=i,
             role=role,
             text=text,
             duration=round(dur, 3),
             image_prompt=img_prompt,
-            motion=role_dir.motion,
-            overlays=overlays,
             start=round(cursor, 3),
             visual_hints={
                 "framing": _ROLE_DIRECTION_FALLBACK[role]["framing"],

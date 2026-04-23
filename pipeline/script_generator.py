@@ -10,6 +10,7 @@ import re
 from pathlib import Path
 
 import anthropic
+from anthropic.types import TextBlock
 
 import config
 from pipeline.research import research_topic
@@ -106,7 +107,9 @@ def _load_edited_prompt(prompt_path: Path, original: str) -> str:
         return original
 
 
-def generate_scripts(events: list[dict], slug: str, no_edit: bool = False) -> list[dict]:
+def generate_scripts(
+    events: list[dict], slug: str, no_edit: bool = False
+) -> list[dict]:
     """
     Generate a viral script for each event using Claude API.
     Returns list of script dicts, one per event. Resumable — skips if cached.
@@ -121,7 +124,9 @@ def generate_scripts(events: list[dict], slug: str, no_edit: bool = False) -> li
 
     # Resume: load from disk if already generated
     if output_path.exists():
-        logger.info(f"[script_generator] Cache hit — loading scripts from {output_path}")
+        logger.info(
+            f"[script_generator] Cache hit — loading scripts from {output_path}"
+        )
         with open(output_path, "r", encoding="utf-8") as f:
             scripts = json.load(f)
         scripts = [_validate_and_fix_script(script) for script in scripts]
@@ -132,23 +137,31 @@ def generate_scripts(events: list[dict], slug: str, no_edit: bool = False) -> li
     scripts = []
 
     for idx, event in enumerate(events):
-        logger.info(f"[script_generator] Generating script {idx + 1}/{len(events)}: {event.get('event', '')[:60]}...")
+        logger.info(
+            f"[script_generator] Generating script {idx + 1}/{len(events)}: {event.get('event', '')[:60]}..."
+        )
 
         snippets = research_topic(event.get("event", ""))
         research_section = (
             f"\n\nRESEARCH SNIPPETS (use for factual grounding, do not copy verbatim):\n{snippets}"
-            if snippets else ""
+            if snippets
+            else ""
         )
-        prompt = USER_PROMPT_TEMPLATE.format(
-            event=event.get("event", ""),
-            year=event.get("year", "unknown"),
-            location=event.get("location", "unknown"),
-        ) + research_section
+        prompt = (
+            USER_PROMPT_TEMPLATE.format(
+                event=event.get("event", ""),
+                year=event.get("year", "unknown"),
+                location=event.get("location", "unknown"),
+            )
+            + research_section
+        )
 
         if not no_edit:
             prompt_path = _save_prompt(slug, idx, prompt)
             print(f"\n  Prompt saved: {prompt_path}")
-            print(f"  Edit it now, then press Enter to send to Claude (Enter without editing uses it as-is)...")
+            print(
+                "Edit it now, then press Enter to send to Claude (Enter without editing uses it as-is)..."
+            )
             input()
             prompt = _load_edited_prompt(prompt_path, prompt)
 
@@ -160,8 +173,19 @@ def generate_scripts(events: list[dict], slug: str, no_edit: bool = False) -> li
                 system=SYSTEM_PROMPT,
                 messages=[{"role": "user", "content": prompt}],
             )
-            raw_text = message.content[0].text.strip()
-            logger.debug(f"[script_generator] Raw response for event {idx}:\n{raw_text}")
+            text_parts = [
+                block.text for block in message.content
+                if isinstance(block, TextBlock)
+            ]
+            if not text_parts:
+                raise ValueError(
+                    f"Claude returned no text content "
+                    f"(stop_reason={message.stop_reason})"
+                )
+            raw_text = "".join(text_parts).strip()
+            logger.debug(
+                f"[script_generator] Raw response for event {idx}:\n{raw_text}"
+            )
 
             script = _parse_json_response(raw_text)
             script = _validate_and_fix_script(script)
@@ -211,26 +235,42 @@ def _parse_json_response(text: str) -> dict:
 
 def _validate_and_fix_script(script: dict) -> dict:
     """Validate script fields and compute word count / estimated duration."""
-    required_keys = ["title", "description", "hashtags", "youtube_tags", "hook_type",
-                     "hook", "context", "rehook", "twist", "ending_fact", "full_script", "pin_comment"]
+    required_keys = [
+        "title",
+        "description",
+        "hashtags",
+        "youtube_tags",
+        "hook_type",
+        "hook",
+        "context",
+        "rehook",
+        "twist",
+        "ending_fact",
+        "full_script",
+        "pin_comment",
+    ]
 
     list_keys = {"hashtags", "youtube_tags"}
     for key in required_keys:
         if key not in script:
-            logger.warning(f"[script_generator] Missing key '{key}' in script — using fallback.")
+            logger.warning(
+                f"[script_generator] Missing key '{key}' in script — using fallback."
+            )
             script[key] = [] if key in list_keys else ""
 
     # Recompute word count and estimated duration (avg 130 words/minute for narration)
     full_script = script.get("full_script", "")
     if not full_script:
         # Rebuild from parts if missing
-        full_script = " ".join([
-            script.get("hook", ""),
-            script.get("context", ""),
-            script.get("rehook", ""),
-            script.get("twist", ""),
-            script.get("ending_fact", ""),
-        ]).strip()
+        full_script = " ".join(
+            [
+                script.get("hook", ""),
+                script.get("context", ""),
+                script.get("rehook", ""),
+                script.get("twist", ""),
+                script.get("ending_fact", ""),
+            ]
+        ).strip()
         script["full_script"] = full_script
 
     words = full_script.split()
@@ -241,9 +281,10 @@ def _validate_and_fix_script(script: dict) -> dict:
     script["word_count"] = word_count
     script["estimated_seconds"] = estimated_seconds
 
-    # Clamp title length
-    if len(script.get("title", "")) > 100:
-        script["title"] = script["title"][:97] + "..."
+    # Clamp title to 60 chars (prompt asks for <60; this is the hard ceiling
+    # that keeps it under YouTube's search-result truncation as well).
+    if len(script.get("title", "")) > 60:
+        script["title"] = script["title"][:57] + "..."
 
     # Ensure hashtags + youtube_tags are lists of strings without # prefix
     for field in ("hashtags", "youtube_tags"):
@@ -251,10 +292,6 @@ def _validate_and_fix_script(script: dict) -> dict:
         if isinstance(tags, str):
             tags = [t.strip().lstrip("#") for t in tags.split(",")]
         script[field] = [str(t).lstrip("#") for t in tags if t]
-
-    # Clamp title to 60 chars for CTR
-    if len(script.get("title", "")) > 60:
-        script["title"] = script["title"][:57] + "..."
 
     # Clamp description to YouTube's 5000 char limit (safety net)
     if len(script.get("description", "")) > 5000:

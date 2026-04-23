@@ -8,10 +8,10 @@ import json
 import logging
 import re
 from datetime import datetime, timezone
-from pathlib import Path
 from uuid import uuid4
 
 import anthropic
+from anthropic.types import TextBlock
 
 import config
 from pipeline.retry import with_retry
@@ -159,7 +159,16 @@ def generate_topic_queue(performance_hints: str = "") -> list[dict]:
         messages=[{"role": "user", "content": prompt}],
     )
 
-    raw = message.content[0].text.strip()
+    text_parts = [
+        block.text for block in message.content
+        if isinstance(block, TextBlock)
+    ]
+    if not text_parts:
+        raise ValueError(
+            f"Claude returned no text content "
+            f"(stop_reason={message.stop_reason})"
+        )
+    raw = "".join(text_parts).strip()
     logger.debug(f"[topic_discovery] Raw Claude response:\n{raw[:500]}")
 
     # Strip markdown fences if present

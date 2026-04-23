@@ -1,22 +1,21 @@
 """
-STEP 3 — IMAGE GENERATION (FREE/LOCAL)
-Priority: Automatic1111 → ComfyUI → Hugging Face (needs token)
-          → Replicate (needs token, FLUX.1-dev) → PIL placeholder (guaranteed offline)
+STEP 3 — IMAGE GENERATION
+Priority: Hugging Face (needs token) → Replicate (needs token, FLUX.1-dev)
+          → PIL placeholder (guaranteed offline fallback)
 Generates 5 cinematic 9:16 images per event.
 Saves images to output/<slug>/images/<event_idx>/img_N.png
 """
 
-import base64
 import json
 import logging
 import os
 import random
 import re
 import time
-import uuid
 import urllib.request
 import urllib.error
 from pathlib import Path
+from typing import Any
 
 import config
 from pipeline.retry import with_retry
@@ -26,37 +25,13 @@ logger = logging.getLogger(__name__)
 
 # ── Backend Detection ─────────────────────────────────────────────────────────
 
-def _check_a1111() -> bool:
-    """Check if Automatic1111 WebUI API is running."""
-    try:
-        with urllib.request.urlopen(f"{config.A1111_URL}/sdapi/v1/sd-models", timeout=3) as resp:
-            return resp.status == 200
-    except Exception:
-        return False
-
-
-def _check_comfyui() -> bool:
-    """Check if ComfyUI API is running."""
-    try:
-        with urllib.request.urlopen(f"{config.COMFYUI_URL}/system_stats", timeout=3) as resp:
-            return resp.status == 200
-    except Exception:
-        return False
-
-
 def detect_backend() -> str:
     """
     Auto-detect which image generation backend to use as primary.
-    Priority: A1111 (local) → ComfyUI (local) → Hugging Face (if token set)
-              → Replicate (if token set) → PIL placeholder (offline fallback).
+    Priority: Hugging Face (if token set) → Replicate (if token set)
+              → PIL placeholder (offline fallback).
     Per-image fallback chain in generate_images: primary → pil.
     """
-    if _check_a1111():
-        logger.info("[image_generator] Backend: Automatic1111 (local)")
-        return "a1111"
-    if _check_comfyui():
-        logger.info("[image_generator] Backend: ComfyUI (local)")
-        return "comfyui"
     if os.getenv("HUGGINGFACE_API_TOKEN", ""):
         logger.info("[image_generator] Backend: Hugging Face Inference API (FLUX.1-schnell)")
         return "huggingface"
@@ -180,150 +155,6 @@ def _build_image_prompts(script: dict) -> list[str]:
     return prompts
 
 
-# ── Automatic1111 Backend ─────────────────────────────────────────────────────
-
-def _generate_a1111(prompt: str, out_path: Path) -> Path:
-    """Generate one image via A1111 txt2img API."""
-    payload = {
-        "prompt": prompt,
-        "negative_prompt": config.IMAGE_NEGATIVE_PROMPT,
-        "width": config.IMAGE_WIDTH,
-        "height": config.IMAGE_HEIGHT,
-        "steps": 25,
-        "cfg_scale": 7.5,
-        "sampler_name": "DPM++ 2M Karras",
-        "batch_size": 1,
-        "n_iter": 1,
-    }
-
-    data = json.dumps(payload).encode("utf-8")
-    req = urllib.request.Request(
-        f"{config.A1111_URL}/sdapi/v1/txt2img",
-        data=data,
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
-
-    try:
-        with urllib.request.urlopen(req, timeout=120) as resp:
-            result = json.loads(resp.read().decode("utf-8"))
-    except urllib.error.URLError as e:
-        raise RuntimeError(f"A1111 request failed: {e}")
-
-    images = result.get("images", [])
-    if not images:
-        raise RuntimeError("A1111 returned no images")
-
-    image_data = base64.b64decode(images[0])
-    out_path.write_bytes(image_data)
-    return out_path
-
-
-# ── ComfyUI Backend ───────────────────────────────────────────────────────────
-
-def _build_comfyui_workflow(prompt: str) -> dict:
-    """Build a minimal ComfyUI txt2img workflow."""
-    return {
-        "3": {
-            "class_type": "KSampler",
-            "inputs": {
-                "cfg": 7.5,
-                "denoise": 1.0,
-                "latent_image": ["5", 0],
-                "model": ["4", 0],
-                "negative": ["7", 0],
-                "positive": ["6", 0],
-                "sampler_name": "dpmpp_2m",
-                "scheduler": "karras",
-                "seed": int(time.time()) % 2147483647,
-                "steps": 25,
-            },
-        },
-        "4": {
-            "class_type": "CheckpointLoaderSimple",
-            "inputs": {"ckpt_name": "v1-5-pruned-emaonly.ckpt"},
-        },
-        "5": {
-            "class_type": "EmptyLatentImage",
-            "inputs": {
-                "batch_size": 1,
-                "height": config.IMAGE_HEIGHT,
-                "width": config.IMAGE_WIDTH,
-            },
-        },
-        "6": {
-            "class_type": "CLIPTextEncode",
-            "inputs": {"clip": ["4", 1], "text": prompt},
-        },
-        "7": {
-            "class_type": "CLIPTextEncode",
-            "inputs": {"clip": ["4", 1], "text": config.IMAGE_NEGATIVE_PROMPT},
-        },
-        "8": {
-            "class_type": "VAEDecode",
-            "inputs": {"samples": ["3", 0], "vae": ["4", 2]},
-        },
-        "9": {
-            "class_type": "SaveImage",
-            "inputs": {"filename_prefix": "unreal_history", "images": ["8", 0]},
-        },
-    }
-
-
-def _generate_comfyui(prompt: str, out_path: Path) -> Path:
-    """Generate one image via ComfyUI API."""
-    workflow = _build_comfyui_workflow(prompt)
-    client_id = str(uuid.uuid4())
-    payload = json.dumps({"prompt": workflow, "client_id": client_id}).encode("utf-8")
-
-    # Submit prompt
-    req = urllib.request.Request(
-        f"{config.COMFYUI_URL}/prompt",
-        data=payload,
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            result = json.loads(resp.read().decode("utf-8"))
-    except urllib.error.URLError as e:
-        raise RuntimeError(f"ComfyUI submit failed: {e}")
-
-    prompt_id = result.get("prompt_id")
-    if not prompt_id:
-        raise RuntimeError(f"ComfyUI did not return prompt_id: {result}")
-
-    # Poll for completion
-    for _ in range(120):  # up to 2 minutes
-        time.sleep(1)
-        try:
-            with urllib.request.urlopen(
-                f"{config.COMFYUI_URL}/history/{prompt_id}", timeout=10
-            ) as resp:
-                history = json.loads(resp.read().decode("utf-8"))
-        except urllib.error.URLError:
-            continue
-
-        if prompt_id in history:
-            outputs = history[prompt_id].get("outputs", {})
-            for node_output in outputs.values():
-                images = node_output.get("images", [])
-                if images:
-                    img_info = images[0]
-                    img_url = (
-                        f"{config.COMFYUI_URL}/view"
-                        f"?filename={img_info['filename']}"
-                        f"&subfolder={img_info.get('subfolder', '')}"
-                        f"&type={img_info.get('type', 'output')}"
-                    )
-                    with urllib.request.urlopen(img_url, timeout=30) as img_resp:
-                        out_path.write_bytes(img_resp.read())
-                    return out_path
-            raise RuntimeError("ComfyUI finished but no images in output")
-
-    raise RuntimeError("ComfyUI timed out waiting for image generation")
-
-
 # ── Hugging Face Inference API Backend ───────────────────────────────────────
 
 HF_MODEL_URL = "https://router.huggingface.co/hf-inference/models/black-forest-labs/FLUX.1-schnell"
@@ -400,7 +231,7 @@ def _generate_replicate(prompt: str, out_path: Path) -> Path:
     # FLUX.1-dev requires dimensions to be multiples of 32.
     # Rather than snapping arbitrary config values, use the native aspect_ratio preset
     # which guarantees correct output size without any dimension arithmetic.
-    payload = {
+    payload: dict[str, Any] = {
         "input": {
             "prompt": prompt,
             "aspect_ratio": "9:16",     # native preset — guaranteed portrait output
@@ -684,7 +515,7 @@ def generate_images(
                 event_images.append(out_path)
                 continue
 
-            logger.info(f"[image_generator] Generating image {img_idx + 1}/{config.IMAGES_PER_EVENT}...")
+            logger.info(f"[image_generator] Generating image {img_idx + 1}/{len(prompts)}...")
 
             generated = False
             last_error = None
@@ -695,11 +526,7 @@ def generate_images(
 
             for attempt_backend in backends_to_try:
                 try:
-                    if attempt_backend == "a1111":
-                        _generate_a1111(prompt, out_path)
-                    elif attempt_backend == "comfyui":
-                        _generate_comfyui(prompt, out_path)
-                    elif attempt_backend == "huggingface":
+                    if attempt_backend == "huggingface":
                         _generate_huggingface(prompt, out_path)
                     elif attempt_backend == "replicate":
                         _generate_replicate(prompt, out_path)

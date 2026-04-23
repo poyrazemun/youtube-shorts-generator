@@ -11,7 +11,6 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-import config
 
 logger = logging.getLogger(__name__)
 
@@ -134,7 +133,7 @@ def generate_thumbnail(script: dict, work_dir: Path) -> Path | None:
             from PIL import ImageDraw, ImageFont
 
             img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
-            img = img.resize((THUMB_W, THUMB_H), Image.LANCZOS)
+            img = img.resize((THUMB_W, THUMB_H), Image.Resampling.LANCZOS)
             draw = ImageDraw.Draw(img)
 
             # Dark overlay on top third (title lives here)

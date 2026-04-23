@@ -170,11 +170,9 @@ Run `--auto` daily and `--refresh-topics` weekly via Windows Task Scheduler. See
 
 | Priority | Backend | Requirement |
 |---|---|---|
-| 1 | Automatic1111 (local) | Running with `--api` flag |
-| 2 | ComfyUI (local) | Running normally |
-| 3 | HuggingFace | `HUGGINGFACE_API_TOKEN` in `.env` |
-| 4 | **Replicate** (FLUX.1-dev) | `REPLICATE_API_TOKEN` in `.env` (~$0.003/img) |
-| 5 | PIL placeholder | Always available (offline fallback) |
+| 1 | HuggingFace (FLUX.1-schnell) | `HUGGINGFACE_API_TOKEN` in `.env` |
+| 2 | **Replicate** (FLUX.1-dev) | `REPLICATE_API_TOKEN` in `.env` (~$0.003/img) |
+| 3 | PIL placeholder | Always available (offline fallback) |
 
 Each image is retried up to 3 times with exponential backoff before falling back to the next backend.
 
@@ -208,13 +206,16 @@ KOKORO_SPEED=1.15          # 0.5=slow · 1.15=default Shorts pacing · 1.5=fast
 ## Scene Planning & Presets
 
 Between script generation and rendering, a lightweight **scene planning layer**
-converts each script into an explicit, inspectable `ScenePlan`. This makes the
-pipeline less slideshow-like by giving every narrative beat its own framing,
-motion, and overlays.
+converts each script into an explicit, inspectable `ScenePlan`. Each narrative
+beat becomes its own scene with a role-aware image prompt and its own duration.
 
 ```
 script  →  scene plan  →  image / render inputs  →  video assembly
 ```
+
+Videos are rendered as clean static slideshows — no zoompan/motion, and no
+on-screen text beyond the burned-in subtitles and the subscribe CTA in the
+final seconds.
 
 ### Scene roles
 
@@ -229,19 +230,19 @@ visual treatment:
 | `twist`   | Heightened contrast / drama                     |
 | `ending`  | Clean closing frame with negative space for CTA |
 
-Each scene carries: `role`, `text`, `duration`, `image_prompt`, `motion`, and
-a list of `overlays`. Plans are saved to `output/<slug>/scene_plans/<idx>.json`
+Each scene carries: `role`, `text`, `duration`, `image_prompt`, and
+`visual_hints`. Plans are saved to `output/<slug>/scene_plans/<idx>.json`
 and can be hand-edited between runs (the video step reads them back).
 
 ### Presets (`--preset`)
 
-Presets bundle motion + overlay + prompt-style choices per role.
+Presets bundle per-role prompt-style tokens and duration weights.
 
-| Preset              | Feel                                                          |
-|---------------------|---------------------------------------------------------------|
-| `documentary_clean` | Archival, gentle motion, restrained overlays (default)        |
-| `dramatic_history`  | Chiaroscuro, strong zooms, bold fact badges on twists         |
-| `viral_fact_card`   | TikTok-style, overlay-heavy, punchy zooms                     |
+| Preset              | Feel                                                         |
+|---------------------|--------------------------------------------------------------|
+| `documentary_clean` | Archival, restrained palette (default)                       |
+| `dramatic_history`  | Chiaroscuro, bold contrast, cinematic shadows                |
+| `viral_fact_card`   | Saturated, TikTok-style punchy grading                       |
 
 ```bash
 python orchestrator.py --auto --preset dramatic_history
@@ -251,35 +252,10 @@ python orchestrator.py --topic "Strange Moments" --keyword war --preset viral_fa
 Omitting `--preset` uses `config.DEFAULT_SCENE_PRESET` (defaults to
 `documentary_clean`). All existing CLI flags continue to work unchanged.
 
-### Motion presets
-
-Implemented via ffmpeg `zoompan`:
-
-- `static_hold` — locked frame
-- `slow_push_in` — gradual 1.00 → 1.08 zoom
-- `drift_left` / `drift_right` — slow horizontal pans
-- `dramatic_zoom` — 1.00 → 1.18 with slight upward drift
-
-### Overlay blocks
-
-Pure ffmpeg `drawtext`/`drawbox` fragments, selected per scene by the preset:
-
-- `title_card` — top or center title banner (defaults on hook scenes)
-- `fact_badge` — corner badge with variants `mono` / `pop` / `alert`
-- `era_tag` — year/location chip (defaults on context scenes)
-
-Blocks are declarative (`{"block": "title_card", "params": {...}}`) and live in
-`pipeline/overlay_blocks.py`. Adding a new block = one function + one registry
-entry. The renderer fails open: a broken block produces an empty fragment
-instead of killing the video.
-
 ### Extending
 
 - **New preset** — add a `Preset` to `pipeline/presets.py` and register it in
   `PRESETS`. It's picked up by `--preset` automatically.
-- **New motion** — add an entry to `_PRESETS` in `pipeline/motion.py`.
-- **New overlay block** — add a function + register it in `BLOCKS` in
-  `pipeline/overlay_blocks.py`.
 
 ---
 
@@ -301,7 +277,7 @@ output/
   <slug>/
     events.json       step 1 — discovered event
     scripts.json      step 2 — script + SEO metadata + hook_type
-    scene_plans/      step 2.5 — per-event ScenePlan JSON (scenes, motion, overlays)
+    scene_plans/      step 2.5 — per-event ScenePlan JSON (role-aware scenes + prompts)
     images/           step 3 — one PNG per scene (role-aware prompts)
     audio/            step 4 — narration WAV
     subtitles/        step 5a — .ass + .srt caption files

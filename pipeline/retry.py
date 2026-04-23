@@ -26,12 +26,10 @@ def with_retry(
     def decorator(func: Callable) -> Callable:
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
-            last_exc = None
             for attempt in range(max_retries + 1):
                 try:
                     return func(*args, **kwargs)
                 except exceptions as e:
-                    last_exc = e
                     if attempt < max_retries:
                         delay = base_delay * (2 ** attempt)
                         logger.warning(
@@ -45,6 +43,6 @@ def with_retry(
                             f"[retry] {func.__name__} failed after "
                             f"{max_retries + 1} attempts: {e}"
                         )
-            raise last_exc
+                        raise
         return wrapper
     return decorator

@@ -10,7 +10,7 @@ Usage:
 Pipeline:
   Step 1: Event Discovery   (Claude API)
   Step 2: Script Generation (Claude API)
-  Step 3: Image Generation  (A1111 / ComfyUI / Replicate)
+  Step 3: Image Generation  (Hugging Face / Replicate / PIL fallback)
   Step 4: TTS Generation    (Piper / Coqui / gTTS)
   Step 5: Video Assembly    (ffmpeg)
   Step 6: YouTube Upload    (YouTube Data API v3)
@@ -22,7 +22,6 @@ If a step fails, re-running the command resumes from that step.
 import argparse
 import re
 import sys
-from pathlib import Path
 
 import config
 from pipeline import analytics as analytics_mod
@@ -155,9 +154,12 @@ def run_pipeline(topic: str, keyword: str, count: int, skip_upload: bool = False
         )
         total_images = sum(len(imgs) for imgs in all_image_paths)
         logger.info(f"Step 3 complete: {total_images} images generated across {len(scripts)} events.")
+        for s, imgs in zip(scripts, all_image_paths):
+            state.complete(s.get("event_index", 0), "images", [str(p) for p in imgs])
     except Exception as e:
         logger.error(f"Step 3 FAILED: {e}")
-        logger.error("Ensure A1111, ComfyUI, or REPLICATE_API_TOKEN is configured.")
+        state.fail(0, "images", str(e))
+        logger.error("Ensure HUGGINGFACE_API_TOKEN or REPLICATE_API_TOKEN is configured.")
         sys.exit(1)
 
     # ── STEP 4: TTS Generation ─────────────────────────────────────────────────
@@ -177,8 +179,13 @@ def run_pipeline(topic: str, keyword: str, count: int, skip_upload: bool = False
                 audio_durations.append(25.0)
                 logger.warning("  Audio path missing — defaulting to 25s duration")
 
+        for s, ap in zip(scripts, audio_paths):
+            if ap and ap.exists():
+                state.complete(s.get("event_index", 0), "audio", [str(ap)])
+
     except Exception as e:
         logger.error(f"Step 4 FAILED: {e}")
+        state.fail(0, "audio", str(e))
         sys.exit(1)
 
     # ── Re-plan scenes with actual audio durations + resolved image paths ─────

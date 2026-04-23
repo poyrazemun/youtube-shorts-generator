@@ -5,12 +5,12 @@ YouTube Data API, and saves a summary to output/analytics.json.
 get_performance_hints() returns a plain-English summary for use in Claude prompts.
 Falls back gracefully (returns "") if anything fails.
 """
+
 import json
 import logging
 import os
 from collections import defaultdict
 from datetime import datetime, timezone, timedelta
-from pathlib import Path
 
 import config
 from pipeline import topic_discovery
@@ -18,11 +18,12 @@ from pipeline.retry import with_retry
 
 logger = logging.getLogger(__name__)
 
-_STATS_BATCH_SIZE = 50   # YouTube API max IDs per videos.list call
+_STATS_BATCH_SIZE = 50  # YouTube API max IDs per videos.list call
 _HINTS_MAX_AGE_HOURS = 24
 
 
 # ── Auth ──────────────────────────────────────────────────────────────────────
+
 
 def _get_authenticated_service():
     """Build authenticated YouTube API service (same pattern as youtube_uploader)."""
@@ -43,9 +44,13 @@ def _get_authenticated_service():
 
     if os.path.exists(creds_path):
         try:
-            creds = Credentials.from_authorized_user_file(creds_path, config.YOUTUBE_SCOPES)
+            creds = Credentials.from_authorized_user_file(
+                creds_path, config.YOUTUBE_SCOPES
+            )
         except Exception as e:
-            logger.warning(f"[analytics] Could not load credentials: {e} — re-authorizing.")
+            logger.warning(
+                f"[analytics] Could not load credentials: {e} — re-authorizing."
+            )
             creds = None
 
     if not creds or not creds.valid:
@@ -53,7 +58,9 @@ def _get_authenticated_service():
             try:
                 creds.refresh(Request())
             except Exception as e:
-                logger.warning(f"[analytics] Token refresh failed: {e} — re-authorizing.")
+                logger.warning(
+                    f"[analytics] Token refresh failed: {e} — re-authorizing."
+                )
                 creds = None
 
         if not creds:
@@ -61,7 +68,9 @@ def _get_authenticated_service():
                 raise FileNotFoundError(
                     f"YouTube client secrets not found: {secrets_path}"
                 )
-            flow = InstalledAppFlow.from_client_secrets_file(secrets_path, config.YOUTUBE_SCOPES)
+            flow = InstalledAppFlow.from_client_secrets_file(
+                secrets_path, config.YOUTUBE_SCOPES
+            )
             creds = flow.run_local_server(port=0, open_browser=True)
 
         with open(creds_path, "w") as f:
@@ -75,6 +84,7 @@ def _get_authenticated_service():
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
 
 def _utcnow() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
@@ -124,13 +134,15 @@ def _collect_uploaded_video_ids() -> list[dict]:
                         "keyword": parts[-1] if len(parts) > 1 else slug,
                         "topic": parts[0] if len(parts) > 1 else "unknown",
                     }
-                collected.append({
-                    "video_id": vid,
-                    "title": u.get("title", ""),
-                    "slug": slug,
-                    "keyword": meta["keyword"],
-                    "topic": meta["topic"],
-                })
+                collected.append(
+                    {
+                        "video_id": vid,
+                        "title": u.get("title", ""),
+                        "slug": slug,
+                        "keyword": meta["keyword"],
+                        "topic": meta["topic"],
+                    }
+                )
         except Exception as e:
             logger.warning(f"[analytics] Could not read {uploads_file}: {e}")
 
@@ -151,7 +163,8 @@ def _fetch_channel_videos(service) -> list[dict]:
     if not items:
         return []
     uploads_playlist_id = (
-        items[0].get("contentDetails", {})
+        items[0]
+        .get("contentDetails", {})
         .get("relatedPlaylists", {})
         .get("uploads", "")
     )
@@ -175,39 +188,49 @@ def _fetch_channel_videos(service) -> list[dict]:
             snippet = item.get("snippet", {})
             vid_id = snippet.get("resourceId", {}).get("videoId", "")
             if vid_id:
-                videos.append({
-                    "video_id": vid_id,
-                    "title": snippet.get("title", ""),
-                    "slug": "unknown",
-                    "keyword": "unknown",
-                    "topic": "unknown",
-                })
+                videos.append(
+                    {
+                        "video_id": vid_id,
+                        "title": snippet.get("title", ""),
+                        "slug": "unknown",
+                        "keyword": "unknown",
+                        "topic": "unknown",
+                    }
+                )
         page_token = pl_resp.get("nextPageToken")
         if not page_token:
             break
 
-    logger.info(f"[analytics] Fetched {len(videos)} videos from channel uploads playlist.")
+    logger.info(
+        f"[analytics] Fetched {len(videos)} videos from channel uploads playlist."
+    )
     return videos
 
 
 @with_retry(max_retries=3, base_delay=2)
 def _fetch_stats_batch(service, video_ids: list[str]) -> list[dict]:
     """Fetch statistics for up to 50 video IDs in one API call."""
-    resp = service.videos().list(
-        part="snippet,statistics",
-        id=",".join(video_ids),
-    ).execute()
+    resp = (
+        service.videos()
+        .list(
+            part="snippet,statistics",
+            id=",".join(video_ids),
+        )
+        .execute()
+    )
 
     results = []
     for item in resp.get("items", []):
         stats = item.get("statistics", {})
-        results.append({
-            "video_id": item["id"],
-            "title": item.get("snippet", {}).get("title", ""),
-            "view_count": int(stats.get("viewCount", 0)),
-            "like_count": int(stats.get("likeCount", 0)),
-            "comment_count": int(stats.get("commentCount", 0)),
-        })
+        results.append(
+            {
+                "video_id": item["id"],
+                "title": item.get("snippet", {}).get("title", ""),
+                "view_count": int(stats.get("viewCount", 0)),
+                "like_count": int(stats.get("likeCount", 0)),
+                "comment_count": int(stats.get("commentCount", 0)),
+            }
+        )
     return results
 
 
@@ -261,6 +284,7 @@ def _compute_hook_summaries(videos: list[dict]) -> list[dict]:
 
 # ── Public API ────────────────────────────────────────────────────────────────
 
+
 def fetch_analytics() -> dict:
     """
     Collect all video IDs, fetch stats from YouTube, compute summaries,
@@ -290,12 +314,12 @@ def fetch_analytics() -> dict:
     for v in video_meta:
         meta = enrichment.get(v["video_id"])
         if meta:
-            v["slug"]              = meta.get("slug", v["slug"])
-            v["keyword"]           = meta.get("keyword", v["keyword"])
-            v["topic"]             = meta.get("topic", v["topic"])
-            v["hook_type"]         = meta.get("hook_type", "")
-            v["hook"]              = meta.get("hook", "")
-            v["word_count"]        = meta.get("word_count", 0)
+            v["slug"] = meta.get("slug", v["slug"])
+            v["keyword"] = meta.get("keyword", v["keyword"])
+            v["topic"] = meta.get("topic", v["topic"])
+            v["hook_type"] = meta.get("hook_type", "")
+            v["hook"] = meta.get("hook", "")
+            v["word_count"] = meta.get("word_count", 0)
             v["estimated_seconds"] = meta.get("estimated_seconds", 0)
 
     if not video_meta:
@@ -329,12 +353,14 @@ def fetch_analytics() -> dict:
     enriched = []
     for v in video_meta:
         s = stats_map.get(v["video_id"], {})
-        enriched.append({
-            **v,
-            "view_count": s.get("view_count", 0),
-            "like_count": s.get("like_count", 0),
-            "comment_count": s.get("comment_count", 0),
-        })
+        enriched.append(
+            {
+                **v,
+                "view_count": s.get("view_count", 0),
+                "like_count": s.get("like_count", 0),
+                "comment_count": s.get("comment_count", 0),
+            }
+        )
 
     top_kw, worst_kw = _compute_summaries(enriched)
     hook_summaries = _compute_hook_summaries(enriched)
@@ -421,5 +447,7 @@ def get_performance_hints() -> str:
         return " ".join(parts)
 
     except Exception as e:
-        logger.warning(f"[analytics] get_performance_hints failed (continuing without): {e}")
+        logger.warning(
+            f"[analytics] get_performance_hints failed (continuing without): {e}"
+        )
         return ""

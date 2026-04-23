@@ -1,16 +1,13 @@
 """
-Unit tests for the Phase 1 scene planning layer.
+Unit tests for the scene planning layer.
 
 Run:  python -m unittest test_scene_planner -v
 """
 
-import json
 import tempfile
 import unittest
 from pathlib import Path
 
-from pipeline.overlay_blocks import list_blocks, render_block
-from pipeline.motion import build_motion_filter, list_motions
 from pipeline.presets import DEFAULT_PRESET, get_preset, list_presets
 from pipeline.scene_planner import plan_scenes
 from pipeline.scene_spec import ALL_ROLES, ScenePlan
@@ -52,48 +49,6 @@ class TestPresets(unittest.TestCase):
                 self.assertIsNotNone(direction)
 
 
-class TestMotion(unittest.TestCase):
-    def test_five_motion_presets(self):
-        motions = list_motions()
-        for expected in ("slow_push_in", "drift_left", "drift_right",
-                         "dramatic_zoom", "static_hold"):
-            self.assertIn(expected, motions)
-
-    def test_motion_filter_well_formed(self):
-        f = build_motion_filter("slow_push_in", 5.0)
-        self.assertIn("zoompan", f)
-        self.assertIn("[in]", f)
-        self.assertIn("[out]", f)
-        self.assertIn("fps=24", f)
-
-    def test_unknown_motion_falls_back_to_static(self):
-        f = build_motion_filter("nonexistent", 5.0)
-        self.assertIn("zoompan", f)  # still produces something valid
-
-
-class TestOverlayBlocks(unittest.TestCase):
-    def test_three_blocks_registered(self):
-        for name in ("title_card", "fact_badge", "era_tag"):
-            self.assertIn(name, list_blocks())
-
-    def test_title_card_renders(self):
-        frag = render_block("title_card", {"text": "Hello"}, 0.0, 3.0)
-        self.assertIn("drawtext", frag)
-        self.assertIn("Hello", frag)
-        self.assertIn("between(t,0.00,3.00)", frag)
-
-    def test_empty_title_card_returns_empty(self):
-        self.assertEqual(render_block("title_card", {}, 0.0, 3.0), "")
-
-    def test_unknown_block_returns_empty(self):
-        self.assertEqual(render_block("nope", {}, 0.0, 3.0), "")
-
-    def test_era_tag_builds_from_year_location(self):
-        frag = render_block("era_tag", {"year": "1925", "location": "Paris"}, 5.0, 10.0)
-        self.assertIn("1925", frag)
-        self.assertIn("Paris", frag)
-
-
 class TestScenePlanner(unittest.TestCase):
     def test_plan_produces_one_scene_per_filled_role(self):
         plan = plan_scenes(SAMPLE_SCRIPT, audio_duration=27.0)
@@ -111,15 +66,6 @@ class TestScenePlanner(unittest.TestCase):
         starts = [s.start for s in plan.scenes]
         self.assertEqual(starts, sorted(starts))
 
-    def test_preset_affects_motion_and_overlays(self):
-        doc = plan_scenes(SAMPLE_SCRIPT, 27.0, "documentary_clean")
-        viral = plan_scenes(SAMPLE_SCRIPT, 27.0, "viral_fact_card")
-        # Hook motion differs between presets
-        self.assertEqual(doc.scenes[0].motion, "slow_push_in")
-        self.assertEqual(viral.scenes[0].motion, "dramatic_zoom")
-        # Viral preset puts more overlays on the hook
-        self.assertGreater(len(viral.scenes[0].overlays), len(doc.scenes[0].overlays))
-
     def test_image_prompts_are_role_aware(self):
         plan = plan_scenes(SAMPLE_SCRIPT, 27.0, "documentary_clean")
         hook_prompt = plan.scenes[0].image_prompt
@@ -135,13 +81,6 @@ class TestScenePlanner(unittest.TestCase):
             any(tok in ending_prompt.lower() for tok in ("negative space", "clean", "dusk", "calm"))
         )
 
-    def test_title_card_overlay_gets_script_title(self):
-        plan = plan_scenes(SAMPLE_SCRIPT, 27.0, "viral_fact_card")
-        hook = plan.scenes[0]
-        title_overlays = [o for o in hook.overlays if o.block == "title_card"]
-        self.assertTrue(title_overlays)
-        self.assertEqual(title_overlays[0].params.get("text"), "The Moonlit Coup")
-
     def test_plan_json_roundtrip(self):
         plan = plan_scenes(SAMPLE_SCRIPT, 27.0, "dramatic_history")
         with tempfile.TemporaryDirectory() as d:
@@ -150,7 +89,31 @@ class TestScenePlanner(unittest.TestCase):
             loaded = ScenePlan.load(path)
         self.assertEqual(loaded.preset, plan.preset)
         self.assertEqual(len(loaded.scenes), len(plan.scenes))
-        self.assertEqual(loaded.scenes[0].motion, plan.scenes[0].motion)
+        self.assertEqual(loaded.scenes[0].role, plan.scenes[0].role)
+        self.assertEqual(loaded.scenes[0].image_prompt, plan.scenes[0].image_prompt)
+
+    def test_legacy_json_with_retired_fields_loads(self):
+        """ScenePlan.from_dict must ignore retired `motion`/`overlays` keys."""
+        legacy = {
+            "event_index": 0,
+            "preset": "documentary_clean",
+            "total_duration": 20.0,
+            "scenes": [
+                {
+                    "index": 0,
+                    "role": "hook",
+                    "text": "t",
+                    "duration": 20.0,
+                    "image_prompt": "p",
+                    "start": 0.0,
+                    "motion": "slow_push_in",                # retired — must be ignored
+                    "overlays": [{"block": "title_card"}],   # retired — must be ignored
+                }
+            ],
+        }
+        plan = ScenePlan.from_dict(legacy)
+        self.assertEqual(len(plan.scenes), 1)
+        self.assertEqual(plan.scenes[0].role, "hook")
 
     def test_missing_roles_are_skipped(self):
         script = dict(SAMPLE_SCRIPT)

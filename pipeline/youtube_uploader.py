@@ -178,7 +178,7 @@ def _post_pin_comment(service, video_id: str, comment_text: str) -> None:
             }
         ).execute()
         logger.info(f"[youtube_uploader] Posted comment on {video_id}: {comment_text[:80]}...")
-        logger.info(f"[youtube_uploader] ⚠ Pin this comment manually in YouTube Studio → Comments")
+        logger.info("[youtube_uploader] ⚠ Pin this comment manually in YouTube Studio → Comments")
     except Exception as e:
         logger.warning(f"[youtube_uploader] Comment post failed for {video_id}: {e}")
 

@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 def _check_kokoro() -> bool:
     """Check if Kokoro TTS is installed (requires Python 3.10-3.12)."""
     try:
-        from kokoro import KPipeline  # noqa: F401
+        from kokoro import KPipeline  # type: ignore[import-not-found]  # noqa: F401
         return True
     except ImportError:
         return False
@@ -43,7 +43,7 @@ def _check_piper() -> bool:
 def _check_coqui() -> bool:
     """Check if Coqui TTS Python library is installed."""
     try:
-        import TTS  # noqa: F401
+        import TTS  # type: ignore[import-not-found]  # noqa: F401
         return True
     except ImportError:
         return False
@@ -72,7 +72,7 @@ def _generate_kokoro(text: str, out_path: Path) -> Path:
     Outputs 24kHz float32 audio, resampled to 44.1kHz mono WAV via ffmpeg.
     Requires Python 3.10-3.12 and: pip install kokoro>=0.9.4 soundfile
     """
-    from kokoro import KPipeline
+    from kokoro import KPipeline  # type: ignore[import-not-found]
     import soundfile as sf
     import numpy as np
 
@@ -158,7 +158,7 @@ def _generate_piper(text: str, out_path: Path) -> Path:
 
 def _generate_coqui(text: str, out_path: Path) -> Path:
     """Generate audio using Coqui TTS Python library."""
-    from TTS.api import TTS as CoquiTTS
+    from TTS.api import TTS as CoquiTTS  # type: ignore[import-not-found]
 
     tts = CoquiTTS(model_name="tts_models/en/ljspeech/tacotron2-DDC", progress_bar=False)
     tts.tts_to_file(text=text, file_path=str(out_path))
@@ -198,7 +198,7 @@ def _generate_edge_tts(text: str, out_path: Path) -> Path:
         # If an event loop is already running (e.g. inside Jupyter), use nest_asyncio
         if "cannot run nested" in str(e).lower():
             try:
-                import nest_asyncio
+                import nest_asyncio  # type: ignore[import-not-found]
                 nest_asyncio.apply()
                 loop = asyncio.get_event_loop()
                 loop.run_until_complete(_synthesize())

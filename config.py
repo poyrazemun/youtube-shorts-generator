@@ -39,8 +39,6 @@ CLAUDE_MODEL = "claude-sonnet-4-6"
 CLAUDE_MAX_TOKENS = 4096
 
 # ── Image Generation ──────────────────────────────────────────────────────────
-A1111_URL = os.getenv("A1111_URL", "http://127.0.0.1:7860")
-COMFYUI_URL = os.getenv("COMFYUI_URL", "http://127.0.0.1:8188")
 IMAGES_PER_EVENT = 5
 IMAGE_WIDTH = 608  # 9:16 friendly width for SD (multiple of 64)
 IMAGE_HEIGHT = 1080  # 9:16 friendly height for SD (multiple of 64)

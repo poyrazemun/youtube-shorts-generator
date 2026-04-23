@@ -1,12 +1,18 @@
 """
-Per-event stage completion tracker.
-Saves state to output/<slug>/state.json.
-Enables per-event skip on partial run resumption.
+Per-event stage completion ledger.
+
+Saves state to output/<slug>/state.json for audit and post-hoc inspection
+(which stages finished, which failed, which artifacts were produced).
+
+Note: this ledger is NOT the resume mechanism. Resume is driven by the
+presence of cached artifacts on disk (events.json, scripts.json, per-event
+image PNGs, audio WAVs, caption .srt/.ass, video MP4s). Each stage checks
+for its own outputs before redoing work.
 """
+
 import json
 import logging
 from datetime import datetime
-from pathlib import Path
 
 import config
 
@@ -33,7 +39,9 @@ class PipelineState:
                 self._data = json.loads(self._path.read_text(encoding="utf-8"))
                 logger.debug(f"[state] Loaded state from {self._path}")
             except Exception as e:
-                logger.warning(f"[state] Could not load state file: {e} — starting fresh")
+                logger.warning(
+                    f"[state] Could not load state file: {e} — starting fresh"
+                )
                 self._data = {}
 
     def save(self) -> None:
@@ -41,11 +49,6 @@ class PipelineState:
         self._path.write_text(
             json.dumps(self._data, indent=2, ensure_ascii=False), encoding="utf-8"
         )
-
-    def is_done(self, event_idx: int, stage: str) -> bool:
-        """Return True if this (event, stage) already completed successfully."""
-        entry = self._data.get(str(event_idx), {}).get(stage, {})
-        return entry.get("status") == "done"
 
     def complete(
         self, event_idx: int, stage: str, artifacts: list[str] | None = None
