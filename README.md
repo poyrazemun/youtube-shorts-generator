@@ -278,7 +278,7 @@ output/
     events.json       step 1 — discovered event
     scripts.json      step 2 — script + SEO metadata + hook_type
     scene_plans/      step 2.5 — per-event ScenePlan JSON (role-aware scenes + prompts)
-    images/           step 3 — one PNG per scene (role-aware prompts)
+    images/           step 3 — one PNG per scene + img_N.txt sidecar with the exact prompt sent to the backend
     audio/            step 4 — narration WAV
     subtitles/        step 5a — .ass + .srt caption files
     video/            step 5b — assembled MP4

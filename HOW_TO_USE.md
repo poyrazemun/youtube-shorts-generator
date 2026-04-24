@@ -237,7 +237,7 @@ output/
   <slug>/
     events.json       ← discovered historical events
     scripts.json      ← generated video scripts (includes hook_type field)
-    images/           ← AI-generated images per event
+    images/           ← AI-generated images per event + img_N.txt sidecar with the exact prompt sent to the backend (paste into other tools to compare output)
     audio/            ← TTS narration audio
     subtitles/        ← captions (.ass + .srt)
     video/            ← final .mp4 files

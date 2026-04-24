@@ -529,6 +529,12 @@ def generate_images(
 
         for img_idx, prompt in enumerate(prompts):
             out_path = img_dir / f"img_{img_idx}.png"
+            prompt_path = img_dir / f"img_{img_idx}.txt"
+
+            # Write the exact prompt sent to the backend as a sidecar, so the
+            # prompt can be copied into other image tools for comparison.
+            if not prompt_path.exists():
+                prompt_path.write_text(prompt, encoding="utf-8")
 
             if out_path.exists() and out_path.stat().st_size > 1024:
                 logger.info(f"[image_generator] Cache hit: {out_path.name}")
