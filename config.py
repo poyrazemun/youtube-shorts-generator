@@ -27,12 +27,17 @@ for _d in [
     _d.mkdir(parents=True, exist_ok=True)
 
 # ── API Keys ──────────────────────────────────────────────────────────────────
+# Note: these default to "" when unset; callers must use a truthiness check
+# (e.g. `if config.ANTHROPIC_API_KEY:`), not `is not None`, since the empty
+# string is a valid "missing" value here.
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 REPLICATE_API_TOKEN = os.getenv("REPLICATE_API_TOKEN", "")
 YOUTUBE_CLIENT_SECRETS_FILE = os.getenv(
     "YOUTUBE_CLIENT_SECRETS_FILE", str(BASE_DIR / "client_secrets.json")
 )
-YOUTUBE_CREDENTIALS_FILE = str(BASE_DIR / "credentials.json")
+YOUTUBE_CREDENTIALS_FILE = os.getenv(
+    "YOUTUBE_CREDENTIALS_FILE", str(BASE_DIR / "credentials.json")
+)
 
 # ── Claude Settings ───────────────────────────────────────────────────────────
 CLAUDE_MODEL = "claude-sonnet-4-6"
@@ -101,7 +106,6 @@ YOUTUBE_SCOPES = [
 
 # ── Logging ───────────────────────────────────────────────────────────────────
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
-LOG_FILE = LOGS_DIR / "pipeline.log"
 
 # ── Scene Planning (Phase 1 architecture) ─────────────────────────────────────
 # Default preset used when --preset is not passed. Must be a key of

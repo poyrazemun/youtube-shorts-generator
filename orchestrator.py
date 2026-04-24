@@ -154,7 +154,7 @@ def run_pipeline(topic: str, keyword: str, count: int, skip_upload: bool = False
         )
         total_images = sum(len(imgs) for imgs in all_image_paths)
         logger.info(f"Step 3 complete: {total_images} images generated across {len(scripts)} events.")
-        for s, imgs in zip(scripts, all_image_paths):
+        for s, imgs in zip(scripts, all_image_paths, strict=True):
             state.complete(s.get("event_index", 0), "images", [str(p) for p in imgs])
     except Exception as e:
         logger.error(f"Step 3 FAILED: {e}")
@@ -179,7 +179,7 @@ def run_pipeline(topic: str, keyword: str, count: int, skip_upload: bool = False
                 audio_durations.append(25.0)
                 logger.warning("  Audio path missing — defaulting to 25s duration")
 
-        for s, ap in zip(scripts, audio_paths):
+        for s, ap in zip(scripts, audio_paths, strict=True):
             if ap and ap.exists():
                 state.complete(s.get("event_index", 0), "audio", [str(ap)])
 
@@ -199,8 +199,8 @@ def run_pipeline(topic: str, keyword: str, count: int, skip_upload: bool = False
             )
             # Attach the resolved image paths so scene_plans/<idx>.json is a
             # fully self-describing artifact of what was rendered.
-            for plan, imgs in zip(scene_plans, all_image_paths):
-                for scene, img in zip(plan.scenes, imgs):
+            for plan, imgs in zip(scene_plans, all_image_paths, strict=True):
+                for scene, img in zip(plan.scenes, imgs, strict=False):
                     scene.image_path = str(img)
                 plan.save(config.OUTPUT_DIR / slug / "scene_plans" / f"{plan.event_index}.json")
         except Exception as e:
@@ -218,7 +218,7 @@ def run_pipeline(topic: str, keyword: str, count: int, skip_upload: bool = False
     subtitle_dir = config.OUTPUT_DIR / slug / "subtitles"
     ass_paths: list = []
     srt_paths: list = []
-    for script, audio_path, duration in zip(scripts, audio_paths, audio_durations):
+    for script, audio_path, duration in zip(scripts, audio_paths, audio_durations, strict=True):
         idx = script.get("event_index", 0)
         try:
             ass_p, srt_p = generate_captions(audio_path, script, subtitle_dir, duration)
@@ -246,7 +246,7 @@ def run_pipeline(topic: str, keyword: str, count: int, skip_upload: bool = False
             scene_plans=scene_plans or None,
         )
         logger.info(f"Step 5 complete: {len(video_paths)} videos assembled.")
-        for i, (vp, s) in enumerate(zip(video_paths, scripts)):
+        for i, (vp, s) in enumerate(zip(video_paths, scripts, strict=True)):
             if vp and vp.exists():
                 logger.info(f"  {vp} ({vp.stat().st_size // 1024}KB)")
                 state.complete(s.get("event_index", i), "video", [str(vp)])

@@ -19,7 +19,7 @@ Built entirely with **[Claude Code](https://claude.ai/claude-code)**, using its 
        ↓
   Step 1  event_discovery.py    Claude → 1 strange historical event
   Step 2  script_generator.py   Claude + DuckDuckGo research → viral script with hook formula + rehook + loopable ending + SEO metadata
-  Step 3  image_generator.py    Replicate FLUX.1-dev → 5 cinematic 9:16 images
+  Step 3  image_generator.py    FLUX (HuggingFace schnell, or Replicate dev) → 5 cinematic 9:16 images
   Step 4  tts_generator.py      Kokoro neural TTS → narration audio (fallback: Piper → Coqui → Edge TTS)
   Step 5a captions.py           Whisper / estimation → word-timed subtitles
   Step 5b video_assembler.py    ffmpeg → 1080×1920 MP4 with burned captions + CTA overlay + background music
@@ -187,16 +187,16 @@ Each image is retried up to 3 times with exponential backoff before falling back
 | 3 | Coqui TTS (local) | `pip install TTS` |
 | 4 | **Edge TTS** | Included in requirements.txt (always available fallback) |
 
-Default Kokoro voice: `af_heart` (American Female, warm tone).
+Default Kokoro voice: `bm_george` (British Male) at `KOKORO_SPEED=1.1`.
 
 ### Customising Voice
 
 Set in `.env` — no code changes needed:
 
 ```env
-KOKORO_VOICE=af_heart      # af_heart / am_echo / bf_emma / bm_george / am_liam ...
-KOKORO_LANG_CODE=a         # a=American EN, b=British EN, e=Spanish, f=French, h=Hindi, i=Italian, p=Portuguese
-KOKORO_SPEED=1.15          # 0.5=slow · 1.15=default Shorts pacing · 1.5=fast
+KOKORO_VOICE=bm_george     # af_heart / am_echo / bf_emma / bm_george / am_liam ...
+KOKORO_LANG_CODE=b         # a=American EN, b=British EN, e=Spanish, f=French, h=Hindi, i=Italian, p=Portuguese
+KOKORO_SPEED=1.1           # 0.5=slow · 1.1=default Shorts pacing · 1.5=fast
 ```
 
 > Voice and lang code must match — e.g. `bm_george` requires `KOKORO_LANG_CODE=b`. See [HOW_TO_USE.md](HOW_TO_USE.md) for the full voice list.
@@ -286,8 +286,8 @@ output/
     uploads.json      step 6 — video IDs + URLs
     state.json        per-step completion ledger
 
-topics_queue.json     topic queue with virality scores (persisted in repo for CI)
-video_registry.json   persistent record of all uploaded videos (for analytics)
+topics_queue.json     topic queue with virality scores (local-only, git-ignored)
+video_registry.json   persistent record of all uploaded videos (local-only, git-ignored)
 logs/                 daily rotating logs (14-day retention)
 assets/music/         drop royalty-free .mp3 files here for background music
 growth/               marketing strategy guides (Reddit strategy, etc.)

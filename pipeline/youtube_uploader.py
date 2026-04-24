@@ -26,11 +26,11 @@ def _get_authenticated_service():
         from google.auth.transport.requests import Request
         from google_auth_oauthlib.flow import InstalledAppFlow
         from googleapiclient.discovery import build
-    except ImportError:
+    except ImportError as e:
         raise RuntimeError(
             "Google API packages not installed. Run:\n"
             "  pip install google-api-python-client google-auth-oauthlib google-auth-httplib2"
-        )
+        ) from e
 
     creds = None
     creds_path = config.YOUTUBE_CREDENTIALS_FILE
@@ -67,13 +67,13 @@ def _get_authenticated_service():
             creds = flow.run_local_server(port=0, open_browser=True)
             logger.info("[youtube_uploader] New OAuth token obtained via browser.")
 
-        # Save credentials for future runs (owner read/write only)
-        with open(creds_path, "w") as f:
+        # Save credentials for future runs (owner read/write only). Open with
+        # O_CREAT|O_TRUNC + 0o600 atomically so the file is never readable by
+        # other users, even momentarily. On Windows the mode bits are ignored.
+        flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC
+        fd = os.open(creds_path, flags, 0o600)
+        with os.fdopen(fd, "w") as f:
             f.write(creds.to_json())
-        try:
-            os.chmod(creds_path, 0o600)
-        except Exception:
-            pass  # Windows does not support chmod — harmless
         logger.info(f"[youtube_uploader] Credentials saved to {creds_path}")
 
     service = build("youtube", "v3", credentials=creds)
@@ -88,8 +88,8 @@ def _upload_video(service, video_path: Path, script: dict) -> dict:
     """
     try:
         from googleapiclient.http import MediaFileUpload
-    except ImportError:
-        raise RuntimeError("google-api-python-client not installed.")
+    except ImportError as e:
+        raise RuntimeError("google-api-python-client not installed.") from e
 
     title = script.get("title", "Unreal History Short")
     description = script.get("description", "")
@@ -188,7 +188,7 @@ def _append_to_registry(entry: dict) -> None:
     registry = []
     if config.VIDEO_REGISTRY_PATH.exists():
         try:
-            with open(config.VIDEO_REGISTRY_PATH, "r", encoding="utf-8") as f:
+            with open(config.VIDEO_REGISTRY_PATH, encoding="utf-8") as f:
                 registry = json.load(f)
         except Exception:
             registry = []
@@ -221,7 +221,7 @@ def upload_all_videos(
     existing_results = {}
     if results_path.exists():
         try:
-            with open(results_path, "r") as f:
+            with open(results_path) as f:
                 existing_list = json.load(f)
                 existing_results = {r["event_index"]: r for r in existing_list}
         except Exception:
@@ -281,7 +281,7 @@ def upload_all_videos(
             with open(results_path, "w") as f:
                 json.dump(upload_results, f, indent=2)
 
-            # Persist to the global registry (committed to git, survives CI cleanup)
+            # Persist to the global registry (local-only file, git-ignored — survives across runs)
             _append_to_registry({
                 "video_id": result["video_id"],
                 "title": result["title"],

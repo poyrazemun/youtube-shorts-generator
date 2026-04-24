@@ -68,7 +68,7 @@ class ScenePlan:
         return path
 
     @classmethod
-    def from_dict(cls, d: dict[str, Any]) -> "ScenePlan":
+    def from_dict(cls, d: dict[str, Any]) -> ScenePlan:
         # Tolerate unknown keys in on-disk JSONs (older runs may contain
         # `motion` / `overlays` fields from the retired rendering layer).
         scenes = [
@@ -83,5 +83,5 @@ class ScenePlan:
         )
 
     @classmethod
-    def load(cls, path: Path) -> "ScenePlan":
+    def load(cls, path: Path) -> ScenePlan:
         return cls.from_dict(json.loads(path.read_text(encoding="utf-8")))

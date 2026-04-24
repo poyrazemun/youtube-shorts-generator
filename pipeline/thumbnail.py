@@ -40,10 +40,21 @@ def _fetch_hf_image(prompt: str) -> bytes | None:
         },
         method="POST",
     )
+    _MAX_IMAGE_BYTES = 50 * 1024 * 1024  # 50 MB cap
     try:
         with urllib.request.urlopen(req, timeout=120) as resp:
-            data = resp.read()
-        return data if len(data) >= 1024 else None
+            data = resp.read(_MAX_IMAGE_BYTES + 1)
+        if len(data) > _MAX_IMAGE_BYTES:
+            logger.warning(
+                f"[thumbnail] HuggingFace response exceeds {_MAX_IMAGE_BYTES} byte cap"
+            )
+            return None
+        if len(data) < 1024:
+            return None
+        if not (data.startswith(b"\x89PNG\r\n\x1a\n") or data[:3] == b"\xff\xd8\xff"):
+            logger.warning("[thumbnail] HuggingFace response is not a PNG or JPEG")
+            return None
+        return data
     except Exception as e:
         logger.warning(f"[thumbnail] HuggingFace request failed: {e}")
         return None

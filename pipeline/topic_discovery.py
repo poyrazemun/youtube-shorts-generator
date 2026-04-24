@@ -29,7 +29,7 @@ def _load_registry() -> list[dict]:
     """Load video_registry.json entries."""
     try:
         if config.VIDEO_REGISTRY_PATH.exists():
-            with open(config.VIDEO_REGISTRY_PATH, "r", encoding="utf-8") as f:
+            with open(config.VIDEO_REGISTRY_PATH, encoding="utf-8") as f:
                 return json.load(f)
     except Exception as e:
         logger.warning(f"[topic_discovery] Could not load video registry: {e}")
@@ -225,7 +225,7 @@ def load_queue() -> dict:
     """Load topics_queue.json. Returns empty structure on any error."""
     try:
         if config.TOPICS_QUEUE_PATH.exists():
-            with open(config.TOPICS_QUEUE_PATH, "r", encoding="utf-8") as f:
+            with open(config.TOPICS_QUEUE_PATH, encoding="utf-8") as f:
                 return json.load(f)
     except Exception as e:
         logger.warning(f"[topic_discovery] Could not load queue: {e}")

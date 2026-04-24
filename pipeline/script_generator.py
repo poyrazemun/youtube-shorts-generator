@@ -91,7 +91,7 @@ Return ONLY this JSON (no markdown, no extra text):
 
 def _save_prompt(slug: str, idx: int, prompt: str) -> Path:
     """Write prompt to prompts/<slug>_<idx>.txt and return the path."""
-    prompts_dir = Path("prompts")
+    prompts_dir = config.BASE_DIR / "prompts"
     prompts_dir.mkdir(exist_ok=True)
     prompt_path = prompts_dir / f"{slug}_{idx}.txt"
     prompt_path.write_text(prompt, encoding="utf-8")
@@ -127,7 +127,7 @@ def generate_scripts(
         logger.info(
             f"[script_generator] Cache hit — loading scripts from {output_path}"
         )
-        with open(output_path, "r", encoding="utf-8") as f:
+        with open(output_path, encoding="utf-8") as f:
             scripts = json.load(f)
         scripts = [_validate_and_fix_script(script) for script in scripts]
         logger.info(f"[script_generator] Loaded {len(scripts)} scripts from cache.")
@@ -290,7 +290,7 @@ def _validate_and_fix_script(script: dict) -> dict:
     for field in ("hashtags", "youtube_tags"):
         tags = script.get(field, [])
         if isinstance(tags, str):
-            tags = [t.strip().lstrip("#") for t in tags.split(",")]
+            tags = [t.strip() for t in tags.split(",")]
         script[field] = [str(t).lstrip("#") for t in tags if t]
 
     # Clamp description to YouTube's 5000 char limit (safety net)
