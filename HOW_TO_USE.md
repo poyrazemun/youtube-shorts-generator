@@ -104,6 +104,9 @@ py -3.12 orchestrator.py --delete-topic a3f2
 # Test the pipeline without uploading to YouTube
 py -3.12 orchestrator.py --auto --no-upload
 
+# Dry run — skip Claude + force PIL images + skip upload (zero API spend)
+py -3.12 orchestrator.py --dry-run
+
 # Manual mode — specify topic and keyword yourself
 py -3.12 orchestrator.py --topic "The Radium Girls" --keyword "radium"
 
@@ -122,19 +125,31 @@ py -3.12 orchestrator.py --auto
 
 ---
 
-## Visual Testing (no API calls, no cost)
+## Testing Without API Spend
 
-Use `test_video.py` to instantly preview layout changes — subtitle position, font size, CTA overlay — without running the full pipeline.
+Two tools, different niches.
+
+### `--dry-run` — full pipeline, zero API spend
+
+```bash
+py -3.12 orchestrator.py --dry-run
+```
+
+Runs every step end-to-end with no paid calls: skips Claude (uses a hardcoded fixture event + script), forces the PIL image backend, and skips YouTube upload. Topic/keyword default to a fixture value if omitted.
+
+Output goes to `output/dry_run_dryrun/` as with any normal run.
+
+**When to use it:** after any structural change to the orchestrator, a step, or how steps talk to each other. It validates wiring — does the full pipeline still assemble a video end-to-end — without spending on Claude or Replicate.
+
+### `test_video.py` — video assembly only, custom images
 
 ```bash
 py -3.12 test_video.py
 ```
 
-Output: `test_output/test_video.mp4`
+Drop PNG/JPG files directly into `test_output/`, then run. It uses your images + `assets/voice_sample.wav` as audio + an estimation-based SRT. Only the ffmpeg assembly step runs — no PIL rendering, no TTS synth. Output: `test_output/test_video.mp4`.
 
-It uses solid-colour placeholder images and `assets/voice_sample.wav` as audio. No Claude, no Replicate, no TTS — just ffmpeg.
-
-**When to use it:** any time you change subtitle positioning (`margin_v` in `captions.py` / `video_assembler.py`), font size, CTA timing, or any other visual parameter. Edit the constant, run the script, check the video.
+**When to use it:** when you've generated candidate images in another tool (Midjourney, ComfyUI, etc. — using the `img_N.txt` prompts from a prior real run) and want to preview how they'd look assembled into a short. Also fastest for pure layout tweaks (subtitle `margin_v`, font size, CTA timing) since it skips all generation steps.
 
 ---
 

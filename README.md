@@ -113,10 +113,15 @@ py -3.12 orchestrator.py --clear-topics
 # Remove a single topic by ID (asks for confirmation)
 py -3.12 orchestrator.py --delete-topic a3f2
 
+# Dry run — validate pipeline wiring end-to-end with zero API spend
+# (skips Claude, forces PIL images, skips YouTube upload; topic/keyword optional)
+py -3.12 orchestrator.py --dry-run
+
 # Flags available on all modes
 --no-upload    skip YouTube upload, save videos locally
 --no-edit      skip prompt editing pause (automation mode)
 --verbose      DEBUG-level console logging
+--dry-run      skip Claude + force PIL images + skip upload (no API spend)
 ```
 
 ---
