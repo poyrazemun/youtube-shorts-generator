@@ -20,6 +20,8 @@ If a step fails, re-running the command resumes from that step.
 """
 
 import argparse
+import json
+import os
 import re
 import sys
 
@@ -39,6 +41,54 @@ from pipeline.thumbnail import generate_thumbnail
 from pipeline.tts_generator import generate_audio, get_audio_duration
 from pipeline.video_assembler import assemble_all_videos
 from pipeline.youtube_uploader import upload_all_videos
+
+
+# Hardcoded fixture used by --dry-run to skip Claude calls (steps 1 + 2) and
+# exercise the rest of the pipeline end-to-end with zero API spend.
+_DRY_RUN_EVENT = {
+    "year": "1518",
+    "event": "The Dancing Plague of Strasbourg — 400 people danced uncontrollably for two months, and dozens died of exhaustion.",
+    "location": "Strasbourg",
+    "visual_theme": "medieval townspeople dancing in a cobblestone square",
+}
+_DRY_RUN_SCRIPT_TEXT = (
+    "In 1518, 400 people danced non-stop for two months — and couldn't stop. "
+    "It started with one woman in Strasbourg. Within a week, hundreds joined her. "
+    "But here's the strangest part. "
+    "Authorities hired musicians thinking music would help — it only made it worse. "
+    "Dozens collapsed from exhaustion, and no one ever figured out why."
+)
+
+
+def _build_dry_run_payload() -> tuple[list[dict], list[dict]]:
+    """Return fixture (events, scripts) for --dry-run; no Claude calls."""
+    event = dict(_DRY_RUN_EVENT)
+    words = _DRY_RUN_SCRIPT_TEXT.split()
+    script = {
+        "title": "The Dancing Plague of 1518",
+        "description": "Dry-run fixture script. Not for upload.",
+        "hashtags": ["history", "shorts", "dryrun"],
+        "youtube_tags": ["history", "shorts", "dryrun", "test"],
+        "hook_type": "SPECIFIC_NUMBER",
+        "hook": "In 1518, 400 people danced non-stop for two months — and couldn't stop.",
+        "context": "It started with one woman in Strasbourg. Within a week, hundreds joined her.",
+        "rehook": "But here's the strangest part.",
+        "twist": "Authorities hired musicians thinking music would help — it only made it worse.",
+        "ending_fact": "Dozens collapsed from exhaustion, and no one ever figured out why.",
+        "full_script": _DRY_RUN_SCRIPT_TEXT,
+        "pin_comment": "Dry-run fixture — not posted.",
+        "word_count": len(words),
+        "estimated_seconds": 25,
+        "event_index": 0,
+        "source_event": event,
+    }
+    return [event], [script]
+
+
+def _force_free_backends() -> None:
+    """Strip paid-backend credentials so image generation falls back to PIL."""
+    os.environ.pop("HUGGINGFACE_API_TOKEN", None)
+    config.REPLICATE_API_TOKEN = ""
 
 
 def _make_slug(topic: str, keyword: str) -> str:
@@ -71,7 +121,7 @@ def _print_results(upload_results: list):
     print()
 
 
-def run_pipeline(topic: str, keyword: str, count: int, skip_upload: bool = False, verbose: bool = False, no_edit: bool = False, preset: str | None = None):
+def run_pipeline(topic: str, keyword: str, count: int, skip_upload: bool = False, verbose: bool = False, no_edit: bool = False, preset: str | None = None, dry_run: bool = False):
     """
     Execute the full pipeline end-to-end.
 
@@ -82,14 +132,21 @@ def run_pipeline(topic: str, keyword: str, count: int, skip_upload: bool = False
         skip_upload: If True, skip YouTube upload (useful for testing)
         verbose: If True, set console log level to DEBUG
         no_edit: If True, skip prompt editing pause (automation mode)
+        dry_run: If True, skip Claude (use fixture event + script), force PIL
+                 image backend, and skip YouTube upload — zero API spend, to
+                 validate pipeline wiring after structural changes.
     """
     set_verbose(verbose)
     logger = get_logger("orchestrator")
 
     _print_banner()
+    if dry_run:
+        logger.info("DRY RUN: skipping Claude calls, forcing PIL images, skipping upload.")
+        skip_upload = True
+        _force_free_backends()
     logger.info(f"Starting pipeline: topic='{topic}', keyword='{keyword}', count={count}")
 
-    if not config.ANTHROPIC_API_KEY:
+    if not dry_run and not config.ANTHROPIC_API_KEY:
         logger.error("ANTHROPIC_API_KEY is not set. Add it to your .env file.")
         sys.exit(1)
 
@@ -102,7 +159,14 @@ def run_pipeline(topic: str, keyword: str, count: int, skip_upload: bool = False
     # ── STEP 1: Event Discovery ────────────────────────────────────────────────
     _print_step(1, "EVENT DISCOVERY")
     try:
-        events = discover_events(topic=topic, keyword=keyword, count=count, slug=slug)
+        if dry_run:
+            events, _ = _build_dry_run_payload()
+            events_path = config.OUTPUT_DIR / slug / "events.json"
+            events_path.parent.mkdir(parents=True, exist_ok=True)
+            events_path.write_text(json.dumps(events, indent=2, ensure_ascii=False), encoding="utf-8")
+            logger.info("Step 1: using dry-run fixture event.")
+        else:
+            events = discover_events(topic=topic, keyword=keyword, count=count, slug=slug)
         logger.info(f"Step 1 complete: {len(events)} events discovered.")
         for i, e in enumerate(events):
             logger.info(f"  [{i}] {e.get('year', '?')} — {e.get('event', '')[:80]}")
@@ -115,7 +179,13 @@ def run_pipeline(topic: str, keyword: str, count: int, skip_upload: bool = False
     # ── STEP 2: Script Generation ──────────────────────────────────────────────
     _print_step(2, "SCRIPT GENERATION")
     try:
-        scripts = generate_scripts(events=events, slug=slug, no_edit=no_edit)
+        if dry_run:
+            _, scripts = _build_dry_run_payload()
+            scripts_path = config.OUTPUT_DIR / slug / "scripts.json"
+            scripts_path.write_text(json.dumps(scripts, indent=2, ensure_ascii=False), encoding="utf-8")
+            logger.info("Step 2: using dry-run fixture script.")
+        else:
+            scripts = generate_scripts(events=events, slug=slug, no_edit=no_edit)
         logger.info(f"Step 2 complete: {len(scripts)} scripts generated.")
         for s in scripts:
             logger.info(
@@ -398,6 +468,16 @@ Examples:
         help="Enable DEBUG-level console logging",
     )
     parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        dest="dry_run",
+        help=(
+            "Validate pipeline wiring end-to-end with zero API spend: "
+            "skips Claude (uses a fixture event + script), forces PIL image backend, "
+            "and skips YouTube upload. Topic/keyword default to a fixture value."
+        ),
+    )
+    parser.add_argument(
         "--preset",
         default=None,
         choices=list_presets(),
@@ -414,7 +494,11 @@ Examples:
         or args.clear_topics or args.delete_topic
     )
     if not is_auto_mode:
-        if not args.topic or not args.keyword:
+        if args.dry_run:
+            # Dry-run doesn't need real topic/keyword; fill fixture defaults.
+            args.topic = args.topic or "Dry Run"
+            args.keyword = args.keyword or "dryrun"
+        elif not args.topic or not args.keyword:
             parser.error(
                 "--topic and --keyword are required in manual mode. "
                 "Use --auto to run from the topic queue, or --refresh-topics to generate one."
@@ -626,6 +710,7 @@ Examples:
             verbose=args.verbose,
             no_edit=args.no_edit,
             preset=args.preset,
+            dry_run=args.dry_run,
         )
 
 
