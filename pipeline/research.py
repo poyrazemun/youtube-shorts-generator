@@ -17,9 +17,15 @@ _MAX_SNIPPET_LEN = 300
 # Lines matching these patterns look like prompt-injection attempts smuggled
 # through search snippets (e.g. "Ignore previous instructions…", fake role
 # markers). Drop them before handing snippets to Claude.
+# Two alternatives, because \b only applies to word-ending tokens. The
+# role-marker variants end in `:` (non-word), so \b after the colon would
+# never match — they're handled as a separate alternative without \b.
 _INJECTION_PATTERN = re.compile(
-    r"^\s*(ignore|disregard|forget|system\s*:|assistant\s*:|user\s*:|"
-    r"you\s+are\s+now|new\s+instructions?)\b",
+    r"^\s*("
+    r"(?:ignore|disregard|forget|you\s+are\s+now|new\s+instructions?)\b"
+    r"|"
+    r"(?:system|assistant|user)\s*:"
+    r")",
     re.IGNORECASE,
 )
 
