@@ -1,6 +1,6 @@
 # Unreal History Bot
 
-[![CI](https://github.com/poyrazemun/youtube-shorts-generator/actions/workflows/ci.yml/badge.svg)](https://github.com/poyrazemun/youtube-shorts-generator/actions/workflows/ci.yml)
+[![CI](https://github.com/poyrazemun/youtube-shorts-generator/actions/workflows/ci.yml/badge.svg)](https://github.com/poyrazemun/youtube-shorts-generator/actions/workflows/ci.yml) ![Python](https://img.shields.io/badge/python-3.12-blue.svg) ![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)
 
 A fully automated YouTube Shorts pipeline that discovers strange real historical events, generates scripts, creates images, records voiceover, assembles videos, and uploads them to YouTube — all without human input after setup.
 
