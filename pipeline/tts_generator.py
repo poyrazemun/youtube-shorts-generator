@@ -143,10 +143,10 @@ def _generate_piper(text: str, out_path: Path) -> Path:
         if result.returncode != 0:
             stderr = result.stderr.decode("utf-8", errors="replace")
             raise RuntimeError(f"Piper exited with code {result.returncode}: {stderr}")
-    except subprocess.TimeoutExpired:
-        raise RuntimeError("Piper TTS timed out after 120 seconds")
-    except FileNotFoundError:
-        raise RuntimeError(f"Piper binary not found: {config.PIPER_BINARY}")
+    except subprocess.TimeoutExpired as e:
+        raise RuntimeError("Piper TTS timed out after 120 seconds") from e
+    except FileNotFoundError as e:
+        raise RuntimeError(f"Piper binary not found: {config.PIPER_BINARY}") from e
 
     if not out_path.exists() or out_path.stat().st_size == 0:
         raise RuntimeError("Piper produced no output file")
@@ -183,8 +183,8 @@ def _generate_edge_tts(text: str, out_path: Path) -> Path:
     """
     try:
         import edge_tts
-    except ImportError:
-        raise RuntimeError("edge-tts not installed. Run: pip install edge-tts")
+    except ImportError as e:
+        raise RuntimeError("edge-tts not installed. Run: pip install edge-tts") from e
 
     mp3_path = out_path.with_suffix(".mp3")
 
@@ -233,13 +233,13 @@ def _convert_mp3_to_wav(mp3_path: Path, wav_path: Path) -> None:
         if result.returncode != 0:
             stderr = result.stderr.decode("utf-8", errors="replace")
             raise RuntimeError(f"ffmpeg conversion failed: {stderr}")
-    except FileNotFoundError:
+    except FileNotFoundError as e:
         raise RuntimeError(
             "ffmpeg not found. Install ffmpeg and ensure it's on PATH.\n"
             "  Windows: winget install ffmpeg\n"
             "  macOS: brew install ffmpeg\n"
             "  Linux: apt install ffmpeg"
-        )
+        ) from e
 
 
 # ── Audio Duration ────────────────────────────────────────────────────────────

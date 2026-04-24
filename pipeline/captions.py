@@ -116,7 +116,15 @@ def _generate_whisper_captions(
         start = max(0.0, card_words[0]["start"] + SUBTITLE_TIME_OFFSET)
         end = max(start + 0.05, card_words[-1]["end"] + SUBTITLE_TIME_OFFSET)
         text = " ".join(w["word"] for w in card_words)
-        text = text.replace("{", r"\{").replace("}", r"\}")
+        text = (
+            text.replace("{", r"\{")
+            .replace("}", r"\}")
+            .replace("\\N", " ")
+            .replace("\\n", " ")
+            .replace("\r\n", " ")
+            .replace("\n", " ")
+            .replace("\r", " ")
+        )
 
         dialogues.append(
             f"Dialogue: 0,{_seconds_to_ass_ts(start)},{_seconds_to_ass_ts(end)},"

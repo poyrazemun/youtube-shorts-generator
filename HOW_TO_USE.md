@@ -143,16 +143,16 @@ It uses solid-colour placeholder images and `assets/voice_sample.wav` as audio. 
 Voice settings are controlled via your `.env` file:
 
 ```env
-KOKORO_VOICE=af_heart        # voice name (see table below)
-KOKORO_LANG_CODE=a           # language code (see table below)
-KOKORO_SPEED=1.15            # speaking speed (0.5 = slow, 1.15 = default, 1.5 = fast)
+KOKORO_VOICE=bm_george       # voice name (see table below)
+KOKORO_LANG_CODE=b           # language code (see table below)
+KOKORO_SPEED=1.1             # speaking speed (0.5 = slow, 1.1 = default, 1.5 = fast)
 ```
 
 ### Available Voices
 
 | Voice | Gender | Accent |
 |-------|--------|--------|
-| `af_heart` | Female | American (warm, default) |
+| `af_heart` | Female | American (warm) |
 | `af_bella` | Female | American |
 | `af_nova` | Female | American |
 | `am_echo` | Male | American |
@@ -160,15 +160,15 @@ KOKORO_SPEED=1.15            # speaking speed (0.5 = slow, 1.15 = default, 1.5 =
 | `am_liam` | Male | American |
 | `bf_emma` | Female | British |
 | `bf_isabella` | Female | British |
-| `bm_george` | Male | British |
+| `bm_george` | Male | British (default) |
 | `bm_lewis` | Male | British |
 
 ### Available Language Codes
 
 | Code | Language |
 |------|----------|
-| `a` | American English (default) |
-| `b` | British English |
+| `a` | American English |
+| `b` | British English (default) |
 | `e` | Spanish |
 | `f` | French |
 | `h` | Hindi |
@@ -210,7 +210,7 @@ To run daily without touching your PC:
 |------|-------------------|-----------------------------------------------------------------|
 | 1    | Event Discovery   | Claude finds 1 strange real historical event                    |
 | 2    | Script Generation | Claude writes a viral 20–30s script using one of 5 hook formulas plus a rehook and loop-aware ending |
-| 3    | Image Generation  | Replicate FLUX.1-dev generates 5 cinematic 9:16 images      |
+| 3    | Image Generation  | FLUX generates 5 cinematic 9:16 images (HuggingFace schnell if token set, else Replicate dev, else PIL fallback) |
 | 4    | Voice Generation  | Kokoro neural TTS (auto-fallback: Piper → Coqui → Edge TTS)     |
 | 5a   | Captions          | Whisper word timestamps or estimation-based SRT                 |
 | 5b   | Video Assembly    | ffmpeg: images + audio + captions + "Follow @ThatActuallyHappened11" overlay |
@@ -285,7 +285,7 @@ The `prompts/` folder is gitignored — prompt files are local only.
 | Topic queue exhausted | Run `py -3.12 orchestrator.py --refresh-topics` |
 | Duplicate video generated | Already fixed — `--refresh-topics` now excludes keywords from `video_registry.json` |
 | Topics stuck as `in_progress` | Automatically reset after 2 hours on next `--refresh-topics` |
-| Images failing to generate | Check `REPLICATE_API_TOKEN` in `.env` — PIL placeholder used as fallback |
+| Images failing to generate | Check `HUGGINGFACE_API_TOKEN` or `REPLICATE_API_TOKEN` in `.env` — PIL placeholder used as final fallback |
 | Step fails mid-pipeline | Just re-run — completed steps are cached and skipped |
 | CTA overlay missing or clipped | Check ffmpeg version supports drawtext filter (`ffmpeg -filters \| grep drawtext`) |
 | Script cached with old format | Delete `output/<slug>/scripts.json` and re-run to regenerate |

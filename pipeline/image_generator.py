@@ -189,18 +189,27 @@ def _generate_huggingface(prompt: str, out_path: Path) -> Path:
         method="POST",
     )
 
+    _MAX_IMAGE_BYTES = 50 * 1024 * 1024  # 50 MB cap
     try:
         with urllib.request.urlopen(req, timeout=120) as resp:
-            image_bytes = resp.read()
+            image_bytes = resp.read(_MAX_IMAGE_BYTES + 1)
     except urllib.error.HTTPError as e:
         body = e.read().decode("utf-8", errors="replace")
-        raise RuntimeError(f"Hugging Face API error {e.code}: {body}")
+        raise RuntimeError(f"Hugging Face API error {e.code}: {body}") from e
     except urllib.error.URLError as e:
-        raise RuntimeError(f"Hugging Face connection failed: {e}")
+        raise RuntimeError(f"Hugging Face connection failed: {e}") from e
 
+    if len(image_bytes) > _MAX_IMAGE_BYTES:
+        raise RuntimeError(
+            f"Hugging Face response exceeds {_MAX_IMAGE_BYTES} byte cap"
+        )
     if len(image_bytes) < 1024:
         raise RuntimeError(
             f"Hugging Face returned suspiciously small response ({len(image_bytes)} bytes)"
+        )
+    if not (image_bytes.startswith(b"\x89PNG\r\n\x1a\n") or image_bytes[:3] == b"\xff\xd8\xff"):
+        raise RuntimeError(
+            "Hugging Face response is not a PNG or JPEG image"
         )
 
     out_path.write_bytes(image_bytes)
@@ -273,9 +282,9 @@ def _generate_replicate(prompt: str, out_path: Path) -> Path:
                 )
                 time.sleep(retry_after)
                 continue
-            raise RuntimeError(f"Replicate API error {e.code}: {body}")
+            raise RuntimeError(f"Replicate API error {e.code}: {body}") from e
         except urllib.error.URLError as e:
-            raise RuntimeError(f"Replicate connection failed: {e}")
+            raise RuntimeError(f"Replicate connection failed: {e}") from e
     else:
         raise RuntimeError("Replicate rate limit not resolved after 3 retries")
 
@@ -292,8 +301,25 @@ def _generate_replicate(prompt: str, out_path: Path) -> Path:
             if not output:
                 raise RuntimeError("Replicate succeeded but returned no output URLs")
             img_url = str(output[0]) if isinstance(output, list) else str(output)
+            if not img_url.startswith("https://"):
+                raise RuntimeError(
+                    f"Replicate returned non-https output URL: {img_url!r}"
+                )
+            _MAX_IMAGE_BYTES = 50 * 1024 * 1024  # 50 MB cap
             with urllib.request.urlopen(img_url, timeout=60) as img_resp:
-                out_path.write_bytes(img_resp.read())
+                # Re-check the final URL in case urllib followed a cross-scheme
+                # redirect (e.g. 302 → http://…) past the initial https guard.
+                final_url = getattr(img_resp, "url", img_url)
+                if not final_url.startswith("https://"):
+                    raise RuntimeError(
+                        f"Replicate redirected to non-https URL: {final_url!r}"
+                    )
+                data = img_resp.read(_MAX_IMAGE_BYTES + 1)
+            if len(data) > _MAX_IMAGE_BYTES:
+                raise RuntimeError(
+                    f"Replicate image exceeds {_MAX_IMAGE_BYTES} byte cap"
+                )
+            out_path.write_bytes(data)
             return out_path
 
         if status in ("failed", "canceled"):
@@ -371,8 +397,8 @@ def _generate_pil(prompt: str, out_path: Path, script: dict | None = None) -> Pa
     """
     try:
         from PIL import Image, ImageDraw, ImageFilter
-    except ImportError:
-        raise RuntimeError("Pillow not installed. Run: pip install Pillow")
+    except ImportError as e:
+        raise RuntimeError("Pillow not installed. Run: pip install Pillow") from e
 
     W, H = config.IMAGE_WIDTH, config.IMAGE_HEIGHT
     rng = random.Random(hash(prompt) % 2 ** 32)
@@ -426,14 +452,8 @@ def _generate_pil(prompt: str, out_path: Path, script: dict | None = None) -> Pa
     draw.text((W // 2, 56), header_text, font=font_header, fill=gold, anchor="mm")
 
     # ── Event text (extract readable portion from prompt) ─────────────────────
-    # The prompt starts with a scene description before the first comma
+    # The prompt starts with a scene description before the first comma.
     readable = prompt.split(",")[0].strip()
-    # Remove leading scene type labels ("Wide establishing shot, " etc.)
-    for prefix in ("Wide establishing shot", "Close-up dramatic portrait of main subject",
-                   "Action scene at the height of the event",
-                   "Aftermath and consequence", "Historical artifact or symbolic detail"):
-        if readable.lower().startswith(prefix.lower()):
-            readable = readable[len(prefix):].lstrip(" -—,").strip()
 
     lines = _wrap_text(readable, font_body, W - 80, draw)
     line_height = 56

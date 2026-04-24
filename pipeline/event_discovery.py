@@ -59,7 +59,7 @@ def discover_events(topic: str, keyword: str, count: int, slug: str) -> list[dic
     # Resume: load from disk if already generated
     if output_path.exists():
         logger.info(f"[event_discovery] Cache hit — loading events from {output_path}")
-        with open(output_path, "r", encoding="utf-8") as f:
+        with open(output_path, encoding="utf-8") as f:
             events = json.load(f)
         logger.info(f"[event_discovery] Loaded {len(events)} events from cache.")
         return events

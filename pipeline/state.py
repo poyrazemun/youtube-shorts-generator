@@ -12,7 +12,7 @@ for its own outputs before redoing work.
 
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 
 import config
 
@@ -59,7 +59,7 @@ class PipelineState:
             self._data[key] = {}
         self._data[key][stage] = {
             "status": "done",
-            "ts": datetime.utcnow().isoformat(),
+            "ts": datetime.now(timezone.utc).isoformat(),
             "artifacts": artifacts or [],
         }
         self.save()
@@ -72,7 +72,7 @@ class PipelineState:
             self._data[key] = {}
         self._data[key][stage] = {
             "status": "failed",
-            "ts": datetime.utcnow().isoformat(),
+            "ts": datetime.now(timezone.utc).isoformat(),
             "error": str(error),
         }
         self.save()

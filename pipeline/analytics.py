@@ -32,11 +32,11 @@ def _get_authenticated_service():
         from google.auth.transport.requests import Request
         from google_auth_oauthlib.flow import InstalledAppFlow
         from googleapiclient.discovery import build
-    except ImportError:
+    except ImportError as e:
         raise RuntimeError(
             "Google API packages not installed. Run:\n"
             "  pip install google-api-python-client google-auth-oauthlib google-auth-httplib2"
-        )
+        ) from e
 
     creds = None
     creds_path = config.YOUTUBE_CREDENTIALS_FILE
@@ -119,7 +119,7 @@ def _collect_uploaded_video_ids() -> list[dict]:
         if not uploads_file.exists():
             continue
         try:
-            with open(uploads_file, "r", encoding="utf-8") as f:
+            with open(uploads_file, encoding="utf-8") as f:
                 uploads = json.load(f)
             for u in uploads:
                 vid = u.get("video_id") or u.get("url", "").split("v=")[-1]
@@ -303,7 +303,7 @@ def fetch_analytics() -> dict:
         enrichment[v["video_id"]] = v
     if config.VIDEO_REGISTRY_PATH.exists():
         try:
-            with open(config.VIDEO_REGISTRY_PATH, "r", encoding="utf-8") as f:
+            with open(config.VIDEO_REGISTRY_PATH, encoding="utf-8") as f:
                 for entry in json.load(f):
                     vid = entry.get("video_id")
                     if vid:
@@ -396,7 +396,7 @@ def get_performance_hints() -> str:
 
         if config.ANALYTICS_PATH.exists():
             try:
-                with open(config.ANALYTICS_PATH, "r", encoding="utf-8") as f:
+                with open(config.ANALYTICS_PATH, encoding="utf-8") as f:
                     analytics = json.load(f)
                 fetched_at = datetime.fromisoformat(analytics["fetched_at"])
                 age = datetime.now(timezone.utc) - fetched_at

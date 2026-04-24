@@ -35,7 +35,16 @@ def _build_cta_drawtext(audio_duration: float) -> str:
     box_pad = int(font_size * 0.4)  # padding inside background box
     start_time = max(0.0, audio_duration - CTA_DURATION_SECS)
     safe_text = (
-        CTA_OVERLAY_TEXT.replace("\\", "\\\\").replace("'", "\\'").replace(":", "\\:")
+        CTA_OVERLAY_TEXT.replace("\\", "\\\\")
+        .replace("'", "\\'")
+        .replace(":", "\\:")
+        .replace("%", "\\%")
+        .replace("[", "\\[")
+        .replace("]", "\\]")
+        .replace(",", "\\,")
+        .replace("\r\n", " ")
+        .replace("\n", " ")
+        .replace("\r", " ")
     )
     return (
         f"drawtext=text='{safe_text}':"
