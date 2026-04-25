@@ -13,7 +13,8 @@ from unittest import mock
 
 from orchestrator import _make_slug
 from pipeline.analytics import _compute_summaries, _compute_hook_summaries
-from pipeline import cost_tracker
+from pipeline import content_safety, cost_tracker
+from pipeline.content_safety import _parse_verdict
 from pipeline.cost_tracker import (
     CostTracker,
     claude_cost_usd,
@@ -435,6 +436,82 @@ class LedgerTests(unittest.TestCase):
             self.assertEqual(text.count("video_a"), 1)
             self.assertEqual(text.count("video_b"), 1)
             self.assertIn("TOTAL  2 videos", text)
+
+
+# ── pipeline.content_safety ───────────────────────────────────────────────────
+
+class ParseVerdictTests(unittest.TestCase):
+    def test_parses_pass_verdict(self):
+        raw = '{"verdict": "pass", "rule_violated": "", "reasons": []}'
+        v = _parse_verdict(raw)
+        self.assertEqual(v["verdict"], "pass")
+        self.assertEqual(v["reasons"], [])
+
+    def test_parses_fail_verdict_with_reasons(self):
+        raw = json.dumps({
+            "verdict": "fail",
+            "rule_violated": "Rule 4: Conspiracy framing",
+            "reasons": ["uses 'covered up' phrase", "frames history as suppression"],
+        })
+        v = _parse_verdict(raw)
+        self.assertEqual(v["verdict"], "fail")
+        self.assertIn("Rule 4", v["rule_violated"])
+        self.assertEqual(len(v["reasons"]), 2)
+
+    def test_strips_markdown_fences(self):
+        raw = '```json\n{"verdict": "pass", "rule_violated": "", "reasons": []}\n```'
+        v = _parse_verdict(raw)
+        self.assertEqual(v["verdict"], "pass")
+
+    def test_invalid_verdict_raises(self):
+        raw = '{"verdict": "maybe", "rule_violated": "", "reasons": []}'
+        with self.assertRaises(ValueError):
+            _parse_verdict(raw)
+
+    def test_lowercases_verdict(self):
+        raw = '{"verdict": "PASS", "rule_violated": "", "reasons": []}'
+        self.assertEqual(_parse_verdict(raw)["verdict"], "pass")
+
+    def test_filters_empty_reasons(self):
+        raw = '{"verdict": "fail", "rule_violated": "Rule 5", "reasons": ["bad", "", "  "]}'
+        self.assertEqual(_parse_verdict(raw)["reasons"], ["bad"])
+
+
+class CheckScriptFailOpenTests(unittest.TestCase):
+    """The check must never block on infrastructure failure — only on a
+    successful 'fail' verdict from Claude."""
+
+    def test_missing_rules_file_returns_pass(self):
+        with mock.patch.object(content_safety, "_load_rules", return_value=""):
+            result = content_safety.check_script({"title": "x"})
+        self.assertEqual(result["verdict"], "pass")
+        self.assertIn("rules file missing", result["reasons"][0])
+
+    def test_claude_api_error_returns_pass(self):
+        with mock.patch.object(content_safety, "_load_rules", return_value="rules"), \
+             mock.patch.object(content_safety, "_call_claude", side_effect=RuntimeError("boom")):
+            result = content_safety.check_script({"title": "x"})
+        self.assertEqual(result["verdict"], "pass")
+        self.assertIn("safety check unavailable", result["reasons"][0])
+
+    def test_malformed_json_returns_pass(self):
+        fake_msg = mock.Mock()
+        block = mock.Mock(spec=TextBlock_spec())
+        block.text = "this is not json"
+        fake_msg.content = [block]
+        fake_msg.stop_reason = "end_turn"
+        fake_msg.usage = mock.Mock(input_tokens=10, output_tokens=10)
+        fake_msg.model = "claude-sonnet-4-6"
+        with mock.patch.object(content_safety, "_load_rules", return_value="rules"), \
+             mock.patch.object(content_safety, "_call_claude", return_value=fake_msg):
+            result = content_safety.check_script({"title": "x"})
+        self.assertEqual(result["verdict"], "pass")
+
+
+def TextBlock_spec():
+    """Helper — TextBlock isinstance check needs a real-ish spec."""
+    from anthropic.types import TextBlock
+    return TextBlock
 
 
 if __name__ == "__main__":

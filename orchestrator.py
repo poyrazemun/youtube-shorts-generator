@@ -30,6 +30,7 @@ from pipeline import analytics as analytics_mod
 from pipeline import cost_tracker
 from pipeline import topic_discovery
 from pipeline.captions import generate_captions
+from pipeline.content_safety import check_all as check_scripts_safety
 from pipeline.event_discovery import discover_events
 from pipeline.image_generator import generate_images
 from pipeline.log import get_logger, set_verbose
@@ -110,6 +111,28 @@ def _print_step(n: int, name: str):
     print(f"\n{'─' * 60}")
     print(f"  STEP {n}: {name}")
     print(f"{'─' * 60}")
+
+
+# Exit code used when content_safety halts the pipeline. Distinct from 1 (generic
+# failure) so --auto / --pick can mark the topic failed with a specific reason.
+_SAFETY_EXIT_CODE = 42
+
+# Sidecar file the safety step writes when it halts. --auto/--pick reads it
+# (then deletes) so the topic-queue failure reason captures *what* was violated
+# rather than just "pipeline sys.exit(42)".
+_SAFETY_FAILURE_REASON_PATH = config.OUTPUT_DIR / ".last_safety_failure.txt"
+
+
+def _consume_safety_failure_reason() -> str:
+    """Read + delete the safety-failure sidecar. Returns a queue-mark reason."""
+    if not _SAFETY_FAILURE_REASON_PATH.exists():
+        return "content safety check failed (no detail captured)"
+    try:
+        reason = _SAFETY_FAILURE_REASON_PATH.read_text(encoding="utf-8").strip()
+        _SAFETY_FAILURE_REASON_PATH.unlink(missing_ok=True)
+        return f"content safety: {reason}" if reason else "content safety check failed"
+    except Exception:
+        return "content safety check failed"
 
 
 def _finalize_cost_tracking(tracker, logger, completed: bool):
@@ -224,7 +247,48 @@ def run_pipeline(topic: str, keyword: str, count: int, skip_upload: bool = False
     finally:
         tracker.end_step("script_generation")
 
-    # ── STEP 2.5: Scene Planning (pre-render — uses estimated durations) ───────
+    # ── STEP 2.5: Content Safety Check ─────────────────────────────────────────
+    # Halts the run BEFORE any image-generation spend if Claude flags the
+    # script as something YouTube would demote. Skipped under --dry-run.
+    if not dry_run:
+        _print_step(2.5, "CONTENT SAFETY CHECK")
+        tracker.start_step("content_safety")
+        try:
+            all_passed, safety_results = check_scripts_safety(scripts)
+            safety_path = config.OUTPUT_DIR / slug / "safety.json"
+            safety_path.write_text(
+                json.dumps(safety_results, indent=2, ensure_ascii=False),
+                encoding="utf-8",
+            )
+            if not all_passed:
+                violations = [r for r in safety_results if r["verdict"] == "fail"]
+                logger.error(
+                    f"Step 2.5 HALTED: {len(violations)} script(s) failed safety check. "
+                    f"See {safety_path} for details."
+                )
+                for r in violations:
+                    logger.error(
+                        f"  Rule violated: {r.get('rule_violated', '?')} — "
+                        f"{'; '.join(r.get('reasons', []))}"
+                    )
+                # Stash the violation summary for --auto/--pick to surface
+                # in the queue's failure reason.
+                summary = "; ".join(
+                    f"{r.get('rule_violated', '?')}: {' / '.join(r.get('reasons', []))}"
+                    for r in violations
+                )
+                _SAFETY_FAILURE_REASON_PATH.write_text(summary, encoding="utf-8")
+                _finalize_cost_tracking(tracker, logger, completed=False)
+                logger.info(
+                    "Re-run --auto to pick the next pending topic. "
+                    "The current topic will be marked failed in the queue."
+                )
+                sys.exit(_SAFETY_EXIT_CODE)
+            logger.info("Step 2.5 complete: all scripts passed safety check.")
+        finally:
+            tracker.end_step("content_safety")
+
+    # ── STEP 2.6: Scene Planning (pre-render — uses estimated durations) ───────
     active_preset = preset or config.DEFAULT_SCENE_PRESET
     logger.info(f"[scene_planner] Using preset: {active_preset}")
     tracker.start_step("scene_planning")
@@ -739,9 +803,9 @@ Examples:
             topic_discovery.mark_topic_done(entry["id"], slug)
             logger.info(f"[pick] Topic '{entry['keyword']}' complete.")
         except SystemExit as exc:
-            topic_discovery.mark_topic_failed(
-                entry["id"], f"pipeline sys.exit({exc.code})"
-            )
+            reason = _consume_safety_failure_reason() if exc.code == _SAFETY_EXIT_CODE \
+                else f"pipeline sys.exit({exc.code})"
+            topic_discovery.mark_topic_failed(entry["id"], reason)
             logger.error(f"[pick] Topic '{entry['keyword']}' failed — marked in queue.")
             raise
 
@@ -772,9 +836,9 @@ Examples:
             topic_discovery.mark_topic_done(entry["id"], slug)
             logger.info(f"[auto] Topic '{entry['keyword']}' complete.")
         except SystemExit as exc:
-            topic_discovery.mark_topic_failed(
-                entry["id"], f"pipeline sys.exit({exc.code})"
-            )
+            reason = _consume_safety_failure_reason() if exc.code == _SAFETY_EXIT_CODE \
+                else f"pipeline sys.exit({exc.code})"
+            topic_discovery.mark_topic_failed(entry["id"], reason)
             logger.error(f"[auto] Topic '{entry['keyword']}' failed — marked in queue.")
             raise  # re-raise so scheduler sees non-zero exit code
 

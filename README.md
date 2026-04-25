@@ -148,6 +148,12 @@ Keywords from already-uploaded videos (tracked in `video_registry.json`) are aut
 
 If a pipeline run crashes or is interrupted, the topic stays `in_progress`. On the next `--refresh-topics`, any `in_progress` entry older than 2 hours is automatically reset to `failed` and replaced with fresh topics.
 
+### Content Safety Check (Step 2.5)
+
+Between script generation and image generation, every script is run through one Claude call that evaluates it against `growth/youtube-restriction-rules.md`. If the script would be demoted, age-restricted, demonetized, or removed by YouTube — most importantly Rule 4 (conspiracy framing), Rule 5 (forbidden categories: suicide methods, sexual violence, harm to minors, terrorism glorification, false claims about living people), and Rule 6 (graphic gore as focal point) — the pipeline halts **before** spending on image generation. The topic is marked `failed` in the queue with the violated rule, so re-running `--auto` picks the next pending topic.
+
+The full per-script verdict is saved to `output/<slug>/safety.json` for audit. Safety check failures on infrastructure (Claude API down, malformed JSON response) fail-open with a warning — only a successful `"fail"` verdict from Claude halts the run, so an offline Claude doesn't block your pipeline. The check is skipped under `--dry-run` (zero API spend stays zero).
+
 ### Cost & Timing Tracking
 
 Every successful run records per-step wall-clock + Claude token usage + image-generation counts (per provider) and writes two artifacts:

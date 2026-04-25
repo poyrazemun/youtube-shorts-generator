@@ -70,6 +70,8 @@ py -3.12 orchestrator.py --auto
 ```
 Picks the highest-scoring pending topic, runs all 6 pipeline steps, uploads to YouTube.
 
+**Content safety check (between Step 2 and Step 3):** the pipeline runs every script through one Claude call that evaluates it against `growth/youtube-restriction-rules.md`. If the script would be demoted, age-restricted, or removed by YouTube, the pipeline **halts before any image-generation spend** — the topic is marked `failed` in the queue with the violated rule, and re-running `--auto` simply moves to the next pending topic. The verdicts for each script are saved to `output/<slug>/safety.json`. Safety check failures on infrastructure (Claude API down, malformed JSON) fail-open with a warning logged — only a successful "fail" verdict halts the run.
+
 After each successful run the pipeline prints a one-line cost summary, e.g.:
 ```
   Pipeline finished in 87s, ~$0.0460 spend (Claude $0.0310, images 5×replicate $0.0150)
@@ -283,6 +285,7 @@ output/
     video/            ← final .mp4 files
     thumbnails/       ← YouTube thumbnails (1280x720)
     uploads.json      ← upload results with YouTube video URLs
+    safety.json       ← per-script verdicts from the content-safety pre-check
     cost.json         ← per-step timings + token usage + image counts + USD totals (gitignored)
 
 output/cost_ledger.txt ← chronological one-line-per-video cost log with running totals (gitignored)
