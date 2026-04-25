@@ -16,7 +16,7 @@ py -3.12 -m pip install -r requirements.txt
 ### 2. Create your `.env` file in the project root
 ```env
 ANTHROPIC_API_KEY=sk-ant-...
-REPLICATE_API_TOKEN=r8_...          # for image generation (~$0.003/image)
+REPLICATE_API_TOKEN=r8_...          # ~$0.025/image with FLUX.1-dev (5 images = $0.125 per video)
 YOUTUBE_PRIVACY=private             # start private, change to public when ready
 LOG_LEVEL=INFO
 ```
@@ -74,7 +74,7 @@ Picks the highest-scoring pending topic, runs all 6 pipeline steps, uploads to Y
 
 After each successful run the pipeline prints a one-line cost summary, e.g.:
 ```
-  Pipeline finished in 87s, ~$0.0460 spend (Claude $0.0310, images 5×replicate $0.0150)
+  Pipeline finished in 200s, ~$0.1552 spend (Claude $0.0302, images 5×replicate $0.1250)
 ```
 The full per-step breakdown (timings, token counts, image counts per provider) is saved to `output/<slug>/cost.json`, and one row is appended to `output/cost_ledger.txt` so you can scroll back through every video you have ever run with running totals at the bottom. Both files are gitignored.
 

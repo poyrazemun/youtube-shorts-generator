@@ -1,17 +1,14 @@
+<a href="https://youtube.com/shorts/atF2NeAqYUg">
+  <img src="https://img.youtube.com/vi/atF2NeAqYUg/maxresdefault.jpg" alt="Sample Short produced by this pipeline — click to watch on YouTube" align="right" width="240">
+</a>
+
 # Unreal History Bot
 
 [![CI](https://github.com/poyrazemun/youtube-shorts-generator/actions/workflows/ci.yml/badge.svg)](https://github.com/poyrazemun/youtube-shorts-generator/actions/workflows/ci.yml) ![Python](https://img.shields.io/badge/python-3.12-blue.svg) ![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json) [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE) ![Last commit](https://img.shields.io/github/last-commit/poyrazemun/youtube-shorts-generator)
 
-> **An autonomous YouTube Shorts channel about strange real history.** Run it on a daily schedule and the channel runs itself — topics, scripts, images, voiceover, subtitles, upload — for **~$0.04 per video**.
+> **An autonomous YouTube Shorts channel about strange real history.** Run it on a daily schedule and the channel runs itself — topics, scripts, images, voiceover, subtitles, upload. **~$0.03 per video on HuggingFace, ~$0.16 on Replicate FLUX.1-dev.**
 
-📺 **See it in action:** [@ThatActuallyHappened11 on YouTube](https://www.youtube.com/@ThatActuallyHappened11) — the live channel this repo runs.
-
-<a href="https://youtube.com/shorts/atF2NeAqYUg">
-  <img src="https://img.youtube.com/vi/atF2NeAqYUg/maxresdefault.jpg" alt="Sample Short produced by this pipeline" width="320">
-</a>
-<br/>
-<sub>↑ Click to watch a Short produced end-to-end by this pipeline.</sub>
-
+📺 **See it in action:** [@ThatActuallyHappened11 on YouTube](https://www.youtube.com/@ThatActuallyHappened11) — the live channel this repo runs. **Click the thumbnail to watch a sample Short produced end-to-end by this pipeline.**
 
 You set it up once. From then on, one command per day publishes one short. Topics are picked from a Claude-generated queue scored for virality, scripts use proven hook formulas, images come from FLUX, the voice is Kokoro TTS, and YouTube performance data feeds back into the next batch of topics so the channel learns what works.
 
@@ -70,7 +67,20 @@ Full setup (ffmpeg, espeak-ng, YouTube OAuth) is in [Setup](#setup) below.
 
 ## How It Works
 
-The pipeline is a six-step CLI: pick a topic from the scored queue, write the script, generate images, synthesise voice, burn captions, upload. Every step caches its output, so re-running picks up where it stopped. **Cost per video: ~$0.03–0.05** — Claude (~$0.02–0.04 for topic + script + safety check) + Replicate FLUX.1-dev (~$0.015 for 5 images); Kokoro TTS and YouTube upload are free.
+The pipeline is a six-step CLI: pick a topic from the scored queue, write the script, generate images, synthesise voice, burn captions, upload. Every step caches its output, so re-running picks up where it stopped.
+
+**Cost per video — measured from a real run** (`output/<slug>/cost.json`):
+
+| Component | Cost |
+|---|---|
+| Claude (event + script + content safety, Sonnet 4.6) | ~$0.03 |
+| Image generation — HuggingFace FLUX.1-schnell (`HUGGINGFACE_API_TOKEN` set) | **Free** |
+| Image generation — Replicate FLUX.1-dev (5 × $0.025) | $0.125 |
+| Kokoro TTS, captions, ffmpeg assembly, YouTube upload | Free |
+| **Total: HuggingFace path** | **~$0.03** |
+| **Total: Replicate path** | **~$0.16** |
+
+Switching to HuggingFace saves about 80% per video. The Replicate path is the safer fallback (no rate limits, consistent quality on FLUX.1-dev) but you pay per image.
 
 <details>
 <summary><b>Detailed pipeline diagram</b></summary>
@@ -105,7 +115,7 @@ The pipeline is a six-step CLI: pick a topic from the scored queue, write the sc
 - espeak-ng on PATH (required by Kokoro)
 - Anthropic API key (Claude)
 - YouTube Data API v3 OAuth credentials
-- Replicate API token (for image generation, ~$0.003/image)
+- Replicate API token (for image generation, ~$0.025/image with FLUX.1-dev — see [Cost](#how-it-works))
 
 ```bash
 pip install -r requirements.txt
@@ -134,7 +144,7 @@ cp .env.example .env
 
 ```env
 ANTHROPIC_API_KEY=sk-ant-...
-REPLICATE_API_TOKEN=r8_...      # for image generation (~$0.003/image)
+REPLICATE_API_TOKEN=r8_...      # ~$0.025/image with FLUX.1-dev (5 images = $0.125 per video)
 YOUTUBE_PRIVACY=private
 ```
 
@@ -228,7 +238,7 @@ Every successful run records per-step wall-clock + Claude token usage + image-ge
 Both files are gitignored. After each successful run a one-line summary prints to the console:
 
 ```
-Pipeline finished in 87s, ~$0.0460 spend (Claude $0.0310, images 5×replicate $0.0150)
+Pipeline finished in 200s, ~$0.1552 spend (Claude $0.0302, images 5×replicate $0.1250)
 ```
 
 **Updating pricing when rates change**
@@ -286,7 +296,7 @@ Run `--auto` daily and `--refresh-topics` weekly via Windows Task Scheduler. See
 | Priority | Backend | Requirement |
 |---|---|---|
 | 1 | HuggingFace (FLUX.1-schnell) | `HUGGINGFACE_API_TOKEN` in `.env` |
-| 2 | **Replicate** (FLUX.1-dev) | `REPLICATE_API_TOKEN` in `.env` (~$0.003/img) |
+| 2 | **Replicate** (FLUX.1-dev) | `REPLICATE_API_TOKEN` in `.env` (~$0.025/img) |
 | 3 | PIL placeholder | Always available (offline fallback) |
 
 Each image is retried up to 3 times with exponential backoff before falling back to the next backend.
