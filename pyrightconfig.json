@@ -1,0 +1,20 @@
+{
+  "include": ["orchestrator.py", "config.py", "pipeline", "utils"],
+  "exclude": [
+    "**/__pycache__",
+    "**/.venv",
+    "output",
+    "test_output",
+    "logs",
+    "growth",
+    "marketing",
+    "TO-DO",
+    "prompts",
+    "assets", "**/node_modules", "**/.*"
+  ],
+  "pythonVersion": "3.12",
+  "typeCheckingMode": "basic",
+  "reportMissingImports": "warning",
+  "reportMissingTypeStubs": "none",
+  "reportPrivateImportUsage": "none"
+}

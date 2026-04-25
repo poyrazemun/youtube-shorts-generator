@@ -107,7 +107,7 @@ def _print_banner():
     print("═" * 60 + "\n")
 
 
-def _print_step(n: int, name: str):
+def _print_step(n: int | float, name: str):
     print(f"\n{'─' * 60}")
     print(f"  STEP {n}: {name}")
     print(f"{'─' * 60}")
