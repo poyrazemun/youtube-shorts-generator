@@ -12,6 +12,7 @@ import anthropic
 from anthropic.types import TextBlock
 
 import config
+from pipeline import cost_tracker
 from pipeline.retry import with_retry
 
 logger = logging.getLogger(__name__)
@@ -82,6 +83,9 @@ def discover_events(topic: str, keyword: str, count: int, slug: str) -> list[dic
             system=SYSTEM_PROMPT,
             messages=[{"role": "user", "content": prompt}],
         )
+        tracker = cost_tracker.get_active()
+        if tracker is not None:
+            tracker.record_message("event_discovery", message, model=config.CLAUDE_MODEL)
         text_parts = [
             block.text for block in message.content
             if isinstance(block, TextBlock)

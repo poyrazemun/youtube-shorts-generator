@@ -68,6 +68,12 @@ ROADMAP.md
 video_registry.json
 topics_queue.json
 
+# ── Cost tracking (per-run cost.json + chronological ledger) ──────────────────
+# These live under output/ which is already ignored above, but listed
+# explicitly so they stay out of the repo even if output/ is ever un-ignored.
+output/cost_ledger.txt
+output/**/cost.json
+
 # ── Marketing & growth strategy (local only) ──────────────────────────────────
 growth/
 marketing/

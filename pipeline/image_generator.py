@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any
 
 import config
+from pipeline import cost_tracker
 from pipeline.retry import with_retry
 
 logger = logging.getLogger(__name__)
@@ -560,6 +561,9 @@ def generate_images(
                         _generate_pil(prompt, out_path, script)
 
                     logger.info(f"[image_generator] Saved: {out_path} (via {attempt_backend})")
+                    tracker = cost_tracker.get_active()
+                    if tracker is not None:
+                        tracker.record_image("image_generation", attempt_backend)
                     generated = True
                     break
 

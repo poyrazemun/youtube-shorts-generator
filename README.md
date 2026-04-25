@@ -148,6 +148,33 @@ Keywords from already-uploaded videos (tracked in `video_registry.json`) are aut
 
 If a pipeline run crashes or is interrupted, the topic stays `in_progress`. On the next `--refresh-topics`, any `in_progress` entry older than 2 hours is automatically reset to `failed` and replaced with fresh topics.
 
+### Cost & Timing Tracking
+
+Every successful run records per-step wall-clock + Claude token usage + image-generation counts (per provider) and writes two artifacts:
+
+- **`output/<slug>/cost.json`** — full breakdown for that one video (steps, timings, tokens, image counts, USD totals).
+- **`output/cost_ledger.txt`** — chronological one-line-per-video append-only log with a `TOTAL` footer recomputed each run. Re-running the same slug replaces the existing row instead of duplicating it.
+
+Both files are gitignored. After each successful run a one-line summary prints to the console:
+
+```
+Pipeline finished in 87s, ~$0.0460 spend (Claude $0.0310, images 5×replicate $0.0150)
+```
+
+**Updating pricing when rates change**
+
+Pricing rates live in `config.py`:
+
+- `CLAUDE_PRICING` — `{model_id: {"input": $/MTok, "output": $/MTok}}`. If Anthropic changes prices or you switch models, edit the dict directly. Unknown models are recorded as `$0` (with a warning logged), so an unset model won't crash a run.
+- `IMAGE_PRICING` — `{provider: $/image}`. Replicate and HuggingFace rates are also env-overridable via `IMAGE_COST_REPLICATE` and `IMAGE_COST_HUGGINGFACE` in `.env`, so you can tweak rates without touching code.
+
+**Switching image providers**
+
+If you swap providers (e.g. Replicate → HuggingFace, or add a new one), update both:
+
+1. The actual provider call in `pipeline/image_generator.py` (`detect_backend()` and the per-backend functions).
+2. `IMAGE_PRICING` in `config.py` — add the new provider's per-image cost so cost tracking stays accurate. The provider key recorded into `cost.json` is whatever string `image_generator` passes to `tracker.record_image()`, so keep the names aligned.
+
 ### Analytics Feedback Loop
 
 `--analytics` fetches view/like counts for every uploaded video and saves them to `output/analytics.json` along with two derived signals (each requires ≥ 2 videos to be considered, so single uploads can't poison the ranking):

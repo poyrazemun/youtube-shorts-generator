@@ -13,6 +13,7 @@ import anthropic
 from anthropic.types import TextBlock
 
 import config
+from pipeline import cost_tracker
 from pipeline.research import research_topic
 from pipeline.retry import with_retry
 
@@ -173,6 +174,9 @@ def generate_scripts(
                 system=SYSTEM_PROMPT,
                 messages=[{"role": "user", "content": prompt}],
             )
+            tracker = cost_tracker.get_active()
+            if tracker is not None:
+                tracker.record_message("script_generation", message, model=config.CLAUDE_MODEL)
             text_parts = [
                 block.text for block in message.content
                 if isinstance(block, TextBlock)

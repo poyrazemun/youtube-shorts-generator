@@ -116,3 +116,21 @@ DEFAULT_SCENE_PRESET = os.getenv("DEFAULT_SCENE_PRESET", "documentary_clean")
 TOPICS_QUEUE_PATH = BASE_DIR / "topics_queue.json"
 VIDEO_REGISTRY_PATH = BASE_DIR / "video_registry.json"
 ANALYTICS_PATH = OUTPUT_DIR / "analytics.json"
+
+# ── Cost Tracking ─────────────────────────────────────────────────────────────
+# Per-million-token rates in USD. Add new model entries here as needed.
+# Source: https://www.anthropic.com/pricing
+CLAUDE_PRICING: dict[str, dict[str, float]] = {
+    "claude-sonnet-4-6": {"input": 3.0, "output": 15.0},
+    "claude-opus-4-7":   {"input": 15.0, "output": 75.0},
+    "claude-haiku-4-5":  {"input": 1.0, "output": 5.0},
+}
+
+# Per-image USD rate by image-generation provider.
+# Replicate FLUX.1-dev is ~$0.025/image. HuggingFace is free on the inference
+# API. PIL is the offline placeholder fallback (always free).
+IMAGE_PRICING: dict[str, float] = {
+    "replicate":   float(os.getenv("IMAGE_COST_REPLICATE", "0.025")),
+    "huggingface": float(os.getenv("IMAGE_COST_HUGGINGFACE", "0.0")),
+    "pil":         0.0,
+}

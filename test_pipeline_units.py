@@ -7,8 +7,18 @@ Run:  pytest test_pipeline_units.py -v
 import json
 import unittest
 
+import tempfile
+from pathlib import Path
+from unittest import mock
+
 from orchestrator import _make_slug
 from pipeline.analytics import _compute_summaries, _compute_hook_summaries
+from pipeline import cost_tracker
+from pipeline.cost_tracker import (
+    CostTracker,
+    claude_cost_usd,
+    image_cost_usd,
+)
 from pipeline.research import _SnippetExtractor, _sanitize_snippet
 from pipeline.script_generator import _parse_json_response
 from pipeline.topic_discovery import _build_hints_block
@@ -311,6 +321,120 @@ class BuildHintsBlockTests(unittest.TestCase):
         self.assertIn("PERFORMANCE DATA", block)
         self.assertIn("Top: napoleon (5000 avg).", block)
         self.assertIn("Prefer topics", block)
+
+
+# ── pipeline.cost_tracker ─────────────────────────────────────────────────────
+
+class ClaudeCostTests(unittest.TestCase):
+    def test_known_model_input_only(self):
+        # Sonnet 4.6: $3/MTok input
+        self.assertAlmostEqual(
+            claude_cost_usd("claude-sonnet-4-6", 1_000_000, 0), 3.0
+        )
+
+    def test_known_model_input_and_output(self):
+        # Sonnet 4.6: $3 in, $15 out → 1k in, 1k out = 0.003 + 0.015 = 0.018
+        self.assertAlmostEqual(
+            claude_cost_usd("claude-sonnet-4-6", 1000, 1000), 0.018
+        )
+
+    def test_zero_tokens(self):
+        self.assertEqual(claude_cost_usd("claude-sonnet-4-6", 0, 0), 0.0)
+
+    def test_unknown_model_returns_zero(self):
+        self.assertEqual(claude_cost_usd("nonexistent-model", 9999, 9999), 0.0)
+
+
+class ImageCostTests(unittest.TestCase):
+    def test_replicate_default_rate(self):
+        self.assertAlmostEqual(image_cost_usd("replicate", 5), 0.025 * 5)
+
+    def test_huggingface_is_free(self):
+        self.assertEqual(image_cost_usd("huggingface", 100), 0.0)
+
+    def test_pil_is_free(self):
+        self.assertEqual(image_cost_usd("pil", 50), 0.0)
+
+    def test_unknown_provider_zero(self):
+        self.assertEqual(image_cost_usd("midjourney", 1), 0.0)
+
+
+class CostTrackerTests(unittest.TestCase):
+    def test_record_claude_accumulates(self):
+        t = CostTracker("test-slug")
+        t.record_claude("script_generation", "claude-sonnet-4-6", 1000, 1000)
+        t.record_claude("script_generation", "claude-sonnet-4-6", 1000, 0)
+        d = t.to_dict()
+        step = d["steps"]["script_generation"]
+        self.assertEqual(step["claude_calls"], 2)
+        self.assertEqual(step["claude_input_tokens"], 2000)
+        self.assertEqual(step["claude_output_tokens"], 1000)
+        # 2k in × $3 + 1k out × $15 = 0.006 + 0.015 = 0.021
+        self.assertAlmostEqual(step["claude_cost_usd"], 0.021)
+
+    def test_record_image_groups_by_provider(self):
+        t = CostTracker("test-slug")
+        t.record_image("image_generation", "replicate")
+        t.record_image("image_generation", "replicate")
+        t.record_image("image_generation", "pil")
+        d = t.to_dict()
+        self.assertEqual(d["steps"]["image_generation"]["images"],
+                         {"replicate": 2, "pil": 1})
+        # 2 × 0.025 + 1 × 0 = 0.05
+        self.assertAlmostEqual(d["steps"]["image_generation"]["image_cost_usd"], 0.05)
+
+    def test_total_cost_sums_claude_and_image(self):
+        t = CostTracker("test-slug")
+        t.record_claude("a", "claude-sonnet-4-6", 1000, 1000)  # $0.018
+        t.record_image("b", "replicate", count=4)  # $0.10
+        self.assertAlmostEqual(t.total_cost(), 0.118)
+
+    def test_record_message_extracts_usage(self):
+        t = CostTracker("test-slug")
+        msg = mock.Mock()
+        msg.usage.input_tokens = 500
+        msg.usage.output_tokens = 200
+        msg.model = "claude-sonnet-4-6"
+        t.record_message("event_discovery", msg)
+        # 500 × 3/1e6 + 200 × 15/1e6 = 0.0015 + 0.003 = 0.0045
+        self.assertAlmostEqual(t.total_claude_cost(), 0.0045)
+
+    def test_record_message_handles_missing_usage(self):
+        t = CostTracker("test-slug")
+        msg = mock.Mock(spec=[])  # no usage attribute
+        t.record_message("event_discovery", msg)
+        self.assertEqual(t.total_claude_cost(), 0.0)
+
+    def test_active_singleton_set_and_clear(self):
+        t = CostTracker("x")
+        cost_tracker.set_active(t)
+        self.assertIs(cost_tracker.get_active(), t)
+        cost_tracker.set_active(None)
+        self.assertIsNone(cost_tracker.get_active())
+
+
+class LedgerTests(unittest.TestCase):
+    def test_append_and_dedupe_by_slug(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ledger = Path(tmp) / "cost_ledger.txt"
+
+            t1 = CostTracker("video_a")
+            t1.record_image("image_generation", "replicate", count=5)
+            t1.append_to_ledger(ledger)
+
+            t2 = CostTracker("video_b")
+            t2.record_image("image_generation", "replicate", count=3)
+            t2.append_to_ledger(ledger)
+
+            # Re-run video_a — the row for video_a should be replaced, not duplicated
+            t1b = CostTracker("video_a")
+            t1b.record_image("image_generation", "replicate", count=2)
+            t1b.append_to_ledger(ledger)
+
+            text = ledger.read_text(encoding="utf-8")
+            self.assertEqual(text.count("video_a"), 1)
+            self.assertEqual(text.count("video_b"), 1)
+            self.assertIn("TOTAL  2 videos", text)
 
 
 if __name__ == "__main__":

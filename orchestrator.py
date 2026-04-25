@@ -27,6 +27,7 @@ import sys
 
 import config
 from pipeline import analytics as analytics_mod
+from pipeline import cost_tracker
 from pipeline import topic_discovery
 from pipeline.captions import generate_captions
 from pipeline.event_discovery import discover_events
@@ -111,6 +112,21 @@ def _print_step(n: int, name: str):
     print(f"{'─' * 60}")
 
 
+def _finalize_cost_tracking(tracker, logger, completed: bool):
+    """Write cost.json and (on full success) append to ledger + print summary."""
+    try:
+        cost_path = tracker.write_cost_json()
+        logger.info(f"Cost breakdown saved: {cost_path}")
+        if completed:
+            ledger_path = tracker.append_to_ledger()
+            logger.debug(f"Cost ledger updated: {ledger_path}")
+            print("\n  " + tracker.summary_line() + "\n")
+    except Exception as e:
+        logger.warning(f"[cost] Failed to finalize cost tracking: {e}")
+    finally:
+        cost_tracker.set_active(None)
+
+
 def _print_results(upload_results: list):
     print("\n" + "═" * 60)
     print("   UPLOAD RESULTS")
@@ -156,8 +172,12 @@ def run_pipeline(topic: str, keyword: str, count: int, skip_upload: bool = False
 
     state = PipelineState(slug)
 
+    tracker = cost_tracker.CostTracker(slug)
+    cost_tracker.set_active(tracker)
+
     # ── STEP 1: Event Discovery ────────────────────────────────────────────────
     _print_step(1, "EVENT DISCOVERY")
+    tracker.start_step("event_discovery")
     try:
         if dry_run:
             events, _ = _build_dry_run_payload()
@@ -175,9 +195,12 @@ def run_pipeline(topic: str, keyword: str, count: int, skip_upload: bool = False
         logger.error(f"Step 1 FAILED: {e}")
         state.fail(0, "events", str(e))
         sys.exit(1)
+    finally:
+        tracker.end_step("event_discovery")
 
     # ── STEP 2: Script Generation ──────────────────────────────────────────────
     _print_step(2, "SCRIPT GENERATION")
+    tracker.start_step("script_generation")
     try:
         if dry_run:
             _, scripts = _build_dry_run_payload()
@@ -198,10 +221,13 @@ def run_pipeline(topic: str, keyword: str, count: int, skip_upload: bool = False
         logger.error(f"Step 2 FAILED: {e}")
         state.fail(0, "scripts", str(e))
         sys.exit(1)
+    finally:
+        tracker.end_step("script_generation")
 
     # ── STEP 2.5: Scene Planning (pre-render — uses estimated durations) ───────
     active_preset = preset or config.DEFAULT_SCENE_PRESET
     logger.info(f"[scene_planner] Using preset: {active_preset}")
+    tracker.start_step("scene_planning")
     try:
         estimated_durations = [
             float(s.get("estimated_seconds") or 25.0) for s in scripts
@@ -215,9 +241,12 @@ def run_pipeline(topic: str, keyword: str, count: int, skip_upload: bool = False
     except Exception as e:
         logger.warning(f"[scene_planner] Planning failed ({e}) — falling back to legacy render path")
         scene_plans = []
+    finally:
+        tracker.end_step("scene_planning")
 
     # ── STEP 3: Image Generation ───────────────────────────────────────────────
     _print_step(3, "IMAGE GENERATION")
+    tracker.start_step("image_generation")
     try:
         all_image_paths = generate_images(
             scripts=scripts, slug=slug, scene_plans=scene_plans or None
@@ -231,9 +260,12 @@ def run_pipeline(topic: str, keyword: str, count: int, skip_upload: bool = False
         state.fail(0, "images", str(e))
         logger.error("Ensure HUGGINGFACE_API_TOKEN or REPLICATE_API_TOKEN is configured.")
         sys.exit(1)
+    finally:
+        tracker.end_step("image_generation")
 
     # ── STEP 4: TTS Generation ─────────────────────────────────────────────────
     _print_step(4, "VOICE GENERATION (TTS)")
+    tracker.start_step("tts_generation")
     try:
         audio_paths = generate_audio(scripts=scripts, slug=slug)
         logger.info(f"Step 4 complete: {len(audio_paths)} audio files generated.")
@@ -257,6 +289,8 @@ def run_pipeline(topic: str, keyword: str, count: int, skip_upload: bool = False
         logger.error(f"Step 4 FAILED: {e}")
         state.fail(0, "audio", str(e))
         sys.exit(1)
+    finally:
+        tracker.end_step("tts_generation")
 
     # ── Re-plan scenes with actual audio durations + resolved image paths ─────
     if scene_plans:
@@ -285,6 +319,7 @@ def run_pipeline(topic: str, keyword: str, count: int, skip_upload: bool = False
 
     # ── STEP 5a: Caption Generation ────────────────────────────────────────────
     _print_step(5, "VIDEO ASSEMBLY (+ Captions)")
+    tracker.start_step("captions_and_video")
     subtitle_dir = config.OUTPUT_DIR / slug / "subtitles"
     ass_paths: list = []
     srt_paths: list = []
@@ -324,6 +359,8 @@ def run_pipeline(topic: str, keyword: str, count: int, skip_upload: bool = False
         logger.error(f"Step 5 FAILED: {e}")
         state.fail(0, "video", str(e))
         sys.exit(1)
+    finally:
+        tracker.end_step("captions_and_video")
 
     # ── STEP 6: YouTube Upload ─────────────────────────────────────────────────
     if skip_upload:
@@ -332,9 +369,11 @@ def run_pipeline(topic: str, keyword: str, count: int, skip_upload: bool = False
         for vp in video_paths:
             if vp:
                 print(f"  {vp}")
+        _finalize_cost_tracking(tracker, logger, completed=True)
         return
 
     _print_step(6, "YOUTUBE UPLOAD")
+    tracker.start_step("youtube_upload")
 
     # Generate thumbnails before upload
     thumbnail_dir = config.OUTPUT_DIR / slug / "thumbnails"
@@ -371,8 +410,11 @@ def run_pipeline(topic: str, keyword: str, count: int, skip_upload: bool = False
         logger.error(f"Step 6 FAILED: {e}")
         logger.info("Videos are assembled in output/ — re-run to retry upload.")
         sys.exit(1)
+    finally:
+        tracker.end_step("youtube_upload")
 
     logger.info("Pipeline complete!")
+    _finalize_cost_tracking(tracker, logger, completed=True)
 
 
 def main():
