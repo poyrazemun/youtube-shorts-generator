@@ -240,7 +240,7 @@ To run daily without touching your PC:
 2. Set trigger to **Daily** at your preferred time
 3. Set action to run:
    ```
-   python C:\path\to\unreal-history-bot\orchestrator.py --auto
+   python C:\path\to\youtube-shorts-generator\orchestrator.py --auto
    ```
 4. Add a **weekly** task for `--refresh-topics` to keep the topic queue fresh
 

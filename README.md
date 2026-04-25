@@ -1,16 +1,78 @@
 # Unreal History Bot
 
-[![CI](https://github.com/poyrazemun/youtube-shorts-generator/actions/workflows/ci.yml/badge.svg)](https://github.com/poyrazemun/youtube-shorts-generator/actions/workflows/ci.yml) ![Python](https://img.shields.io/badge/python-3.12-blue.svg) ![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)
+[![CI](https://github.com/poyrazemun/youtube-shorts-generator/actions/workflows/ci.yml/badge.svg)](https://github.com/poyrazemun/youtube-shorts-generator/actions/workflows/ci.yml) ![Python](https://img.shields.io/badge/python-3.12-blue.svg) ![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json) [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE) ![Last commit](https://img.shields.io/github/last-commit/poyrazemun/youtube-shorts-generator)
 
-A fully automated YouTube Shorts pipeline that discovers strange real historical events, generates scripts, creates images, records voiceover, assembles videos, and uploads them to YouTube — all without human input after setup.
+> **An autonomous YouTube Shorts channel about strange real history.** Run it on a daily schedule and the channel runs itself — topics, scripts, images, voiceover, subtitles, upload — for **~$0.04 per video**.
 
-Built entirely with **[Claude Code](https://claude.ai/claude-code)**, using its agent and skill system for architecture planning, codebase exploration, and iterative implementation across multiple sessions.
+📺 **See it in action:** [@ThatActuallyHappened11 on YouTube](https://www.youtube.com/@ThatActuallyHappened11) — the live channel this repo runs.
 
+<a href="https://youtube.com/shorts/atF2NeAqYUg">
+  <img src="https://img.youtube.com/vi/atF2NeAqYUg/maxresdefault.jpg" alt="Sample Short produced by this pipeline" width="320">
+</a>
+<br/>
+<sub>↑ Click to watch a Short produced end-to-end by this pipeline.</sub>
 
+You set it up once. From then on, one command per day publishes one short. Topics are picked from a Claude-generated queue scored for virality, scripts use proven hook formulas, images come from FLUX, the voice is Kokoro TTS, and YouTube performance data feeds back into the next batch of topics so the channel learns what works.
+
+---
+
+## Highlights
+
+- **Virality-scored topic queue** — Claude rates 25 topic ideas 1–10; only ≥7 ship, sorted best-first.
+- **Content-safety pre-check** — every script is evaluated against YouTube's demotion rules before any image-generation spend; failed scripts halt the pipeline and are marked failed in the queue.
+- **Scene-aware image prompts** — role + preset system; not 5 generic pictures, but a planned shot list (intro / context / twist / payoff).
+- **Whisper-timed subtitles** — burned-in 3-word cards synced to the audio, with a CTA overlay in the last 3 seconds.
+- **Analytics feedback loop** — `--analytics` summarises which keywords and hook types perform best; those signals are injected into the next `--refresh-topics` prompt.
+- **Per-run cost + timing tracker** — `output/<slug>/cost.json` + a chronological `cost_ledger.txt` with running totals.
+- **Fully resumable** — every step caches its output. Re-run after any failure and the pipeline picks up where it stopped.
+
+---
+
+## Table of Contents
+
+- [Quick Start](#quick-start)
+- [How It Works](#how-it-works)
+- [Requirements](#requirements)
+- [Setup](#setup)
+- [CLI](#cli)
+- [Topic Virality Scoring](#topic-virality-scoring)
+  - [Content Safety Check (Step 2.5)](#content-safety-check-step-25)
+  - [Cost & Timing Tracking](#cost--timing-tracking)
+  - [Analytics Feedback Loop](#analytics-feedback-loop)
+- [Hook Formulas](#hook-formulas)
+- [Daily Automation](#daily-automation-windows-task-scheduler)
+- [Image / Voice Generation](#image-generation-priority-order)
+- [Scene Planning & Presets](#scene-planning--presets)
+- [Output Format & Structure](#output-format)
+- [Built With Claude Code](#built-with-claude-code)
+
+---
+
+## Quick Start
+
+```bash
+git clone https://github.com/poyrazemun/youtube-shorts-generator && cd youtube-shorts-generator
+py -3.12 -m pip install -r requirements.txt
+cp .env.example .env                              # then add ANTHROPIC_API_KEY + REPLICATE_API_TOKEN
+py -3.12 orchestrator.py --refresh-topics         # generate the topic queue
+py -3.12 orchestrator.py --auto                   # publish one video
+```
+
+Full setup (ffmpeg, espeak-ng, YouTube OAuth) is in [Setup](#setup) below.
+
+> The commands use `py -3.12` (the Windows Python launcher). On macOS or Linux, replace it with `python3.12` everywhere.
+
+![CLI screenshot](assets/readme/cli-screenshot.png)
+<sub>Sample CLI output during a real run.</sub>
 
 ---
 
 ## How It Works
+
+The pipeline is a six-step CLI: pick a topic from the scored queue, write the script, generate images, synthesise voice, burn captions, upload. Every step caches its output, so re-running picks up where it stopped. **Cost per video: ~$0.03–0.05** — Claude (~$0.02–0.04 for topic + script + safety check) + Replicate FLUX.1-dev (~$0.015 for 5 images); Kokoro TTS and YouTube upload are free.
+
+<details>
+<summary><b>Detailed pipeline diagram</b></summary>
 
 ```
 --refresh-topics        Claude generates 25 topics, scores each for viral potential (1-10),
@@ -19,18 +81,19 @@ Built entirely with **[Claude Code](https://claude.ai/claude-code)**, using its 
        ↓
 --auto (run daily via Windows Task Scheduler)
        ↓
-  Step 1  event_discovery.py    Claude → 1 strange historical event
-  Step 2  script_generator.py   Claude + DuckDuckGo research → viral script with hook formula + rehook + loopable ending + SEO metadata
-  Step 3  image_generator.py    FLUX (HuggingFace schnell, or Replicate dev) → 5 cinematic 9:16 images
-  Step 4  tts_generator.py      Kokoro neural TTS → narration audio (fallback: Piper → Coqui → Edge TTS)
-  Step 5a captions.py           Whisper / estimation → word-timed subtitles
-  Step 5b video_assembler.py    ffmpeg → 1080×1920 MP4 with burned captions + CTA overlay + background music
-  Step 6  youtube_uploader.py   YouTube Data API v3 → upload with thumbnail
+  Step 1   event_discovery.py    Claude → 1 strange historical event
+  Step 2   script_generator.py   Claude + DuckDuckGo research → viral script with hook formula + rehook + loopable ending + SEO metadata
+  Step 2.5 content_safety.py     Claude evaluates the script vs. YouTube demotion rules; halts before image spend on a fail
+  Step 3   image_generator.py    FLUX (HuggingFace schnell, or Replicate dev) → 5 cinematic 9:16 images
+  Step 4   tts_generator.py      Kokoro neural TTS → narration audio (fallback: Piper → Coqui → Edge TTS)
+  Step 5a  captions.py           Whisper / estimation → word-timed subtitles
+  Step 5b  video_assembler.py    ffmpeg → 1080×1920 MP4 with burned captions + CTA overlay + background music
+  Step 6   youtube_uploader.py   YouTube Data API v3 → upload with thumbnail
        ↓
 --analytics             Fetches view counts, feeds performance data back into topic generation
 ```
 
-Every step is **resumable** — output is cached to disk, so re-running picks up where it left off.
+</details>
 
 ---
 
@@ -343,18 +406,6 @@ logs/                 daily rotating logs (14-day retention)
 assets/music/         drop royalty-free .mp3 files here for background music
 growth/               marketing strategy guides (Reddit strategy, etc.)
 ```
-
----
-
-## Cost Estimate (per video)
-
-| Service | Cost |
-|---|---|
-| Claude API (topic scoring + event + script) | ~$0.02–0.04 |
-| Replicate FLUX.1-dev (5 images) | ~$0.015 |
-| Kokoro TTS (voice) | Free |
-| YouTube upload | Free |
-| **Total** | **~$0.03–0.05** |
 
 ---
 
