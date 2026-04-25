@@ -1,12 +1,8 @@
-<a href="https://youtube.com/shorts/atF2NeAqYUg">
-  <img src="https://img.youtube.com/vi/atF2NeAqYUg/maxresdefault.jpg" alt="Sample Short produced by this pipeline — click to watch on YouTube" align="right" width="240">
-</a>
-
 # Unreal History Bot
 
 [![CI](https://github.com/poyrazemun/youtube-shorts-generator/actions/workflows/ci.yml/badge.svg)](https://github.com/poyrazemun/youtube-shorts-generator/actions/workflows/ci.yml) ![Python](https://img.shields.io/badge/python-3.12-blue.svg) ![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json) [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE) ![Last commit](https://img.shields.io/github/last-commit/poyrazemun/youtube-shorts-generator)
 
-> **An autonomous YouTube Shorts channel about strange real history.** Run it on a daily schedule and the channel runs itself — topics, scripts, images, voiceover, subtitles, upload. **~$0.03 per video on HuggingFace, ~$0.16 on Replicate FLUX.1-dev.**
+> **An autonomous YouTube Shorts channel about strange real history.** Run it on a daily schedule and the channel runs itself — topics, scripts, images, voiceover, subtitles, upload.
 
 📺 **See it in action:** [@ThatActuallyHappened11 on YouTube](https://www.youtube.com/@ThatActuallyHappened11) — the live channel this repo runs. **Click the thumbnail to watch a sample Short produced end-to-end by this pipeline.**
 
@@ -59,9 +55,6 @@ py -3.12 orchestrator.py --auto                   # publish one video
 Full setup (ffmpeg, espeak-ng, YouTube OAuth) is in [Setup](#setup) below.
 
 > The commands use `py -3.12` (the Windows Python launcher). On macOS or Linux, replace it with `python3.12` everywhere.
-
-![CLI screenshot](assets/readme/cli-screenshot.png)
-<sub>Sample CLI output during a real run.</sub>
 
 ---
 
@@ -425,5 +418,4 @@ growth/               marketing strategy guides (Reddit strategy, etc.)
 This project was built entirely using [Claude Code](https://claude.ai/claude-code):
 
 - **Agents** — Plan agents for architecture design, Explore agents for codebase analysis, and general-purpose agents for parallelising research across multiple files simultaneously
-- **Skills** — `/commit` for structured git commits, `claude-api` skill for Anthropic SDK patterns
 - **Multi-session memory** — persistent `MEMORY.md` tracking architecture decisions, tier completion status, and implementation patterns across all development sessions
