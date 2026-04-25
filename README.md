@@ -1,6 +1,6 @@
 # Unreal History Bot
 
-[![CI](https://github.com/poyrazemun/youtube-shorts-generator/actions/workflows/ci.yml/badge.svg)](https://github.com/poyrazemun/youtube-shorts-generator/actions/workflows/ci.yml) ![Python](https://img.shields.io/badge/python-3.12-blue.svg) ![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json) [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE) ![Last commit](https://img.shields.io/github/last-commit/poyrazemun/youtube-shorts-generator)
+[![CI](https://github.com/poyrazemun/youtube-shorts-generator/actions/workflows/ci.yml/badge.svg)](https://github.com/poyrazemun/youtube-shorts-generator/actions/workflows/ci.yml) [![Python](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/downloads/release/python-3120/) [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff) [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE) [![Last commit](https://img.shields.io/github/last-commit/poyrazemun/youtube-shorts-generator)](https://github.com/poyrazemun/youtube-shorts-generator/commits/main)
 
 > **An autonomous YouTube Shorts channel about strange real history.** Run it on a daily schedule and the channel runs itself — topics, scripts, images, voiceover, subtitles, upload.
 
