@@ -533,9 +533,26 @@ Examples:
             top_kw = result.get("top_keywords", [])
             if top_kw:
                 print()
-                print("  TOP KEYWORDS:")
+                print("  TOP KEYWORDS (≥2 videos):")
                 for k in top_kw:
                     print(f"    {k['keyword']:20s}  {k['avg_views']:,} avg views  ({k['video_count']} video{'s' if k['video_count'] != 1 else ''})")
+            hook_perf = result.get("hook_type_performance", [])
+            if hook_perf:
+                print()
+                print("  HOOK TYPE PERFORMANCE (≥2 videos):")
+                for h in hook_perf:
+                    print(f"    {h['hook_type']:25s}  {h['avg_views']:,} avg views  ({h['video_count']} videos)")
+
+            # Show the hint string the next --refresh-topics will feed to Claude.
+            hints_preview = analytics_mod.get_performance_hints()
+            if hints_preview:
+                print()
+                print("  HINTS SENT TO CLAUDE ON NEXT --refresh-topics:")
+                print("  " + "─" * 56)
+                for line in hints_preview.split(". "):
+                    line = line.strip()
+                    if line:
+                        print(f"    {line.rstrip('.')}.")
         else:
             print("  No videos found on channel.")
         print()
@@ -550,6 +567,15 @@ Examples:
         added = topic_discovery.refresh_queue(performance_hints=hints)
         queue = topic_discovery.load_queue()
         pending = sum(1 for t in queue["topics"] if t["status"] == "pending")
+        if hints:
+            print("\n  Hints sent to Claude:")
+            print("  " + "─" * 56)
+            for line in hints.split(". "):
+                line = line.strip()
+                if line:
+                    print(f"    {line.rstrip('.')}.")
+        else:
+            print("\n  No analytics data yet — topics generated without performance hints.")
         print(f"\n  Topic queue replaced: {added} new topics. {pending} pending total.\n")
         print("  " + "─" * 56)
         for i, t in enumerate(queue["topics"], 1):
@@ -606,6 +632,16 @@ Examples:
         added = topic_discovery.refresh_queue(performance_hints=hints)
         queue = topic_discovery.load_queue()
         pending = sum(1 for t in queue["topics"] if t["status"] == "pending")
+        if hints:
+            print("  Hints sent to Claude:")
+            print("  " + "─" * 56)
+            for line in hints.split(". "):
+                line = line.strip()
+                if line:
+                    print(f"    {line.rstrip('.')}.")
+            print()
+        else:
+            print("  No analytics data yet — topics generated without performance hints.\n")
         print(f"  Done: {added} new topics generated. {pending} pending total.\n")
         print("  " + "─" * 56)
         for i, t in enumerate(queue["topics"], 1):

@@ -8,8 +8,10 @@ import json
 import unittest
 
 from orchestrator import _make_slug
+from pipeline.analytics import _compute_summaries, _compute_hook_summaries
 from pipeline.research import _SnippetExtractor, _sanitize_snippet
 from pipeline.script_generator import _parse_json_response
+from pipeline.topic_discovery import _build_hints_block
 
 
 # ── pipeline.research ─────────────────────────────────────────────────────────
@@ -222,6 +224,93 @@ class DrawtextEscapeTests(unittest.TestCase):
     def test_unchanged_for_plain_text(self):
         filt = self._build_with_cta("hello world")
         self.assertIn("text='hello world'", filt)
+
+
+# ── pipeline.analytics — feedback loop ────────────────────────────────────────
+
+class ComputeSummariesTests(unittest.TestCase):
+    def _make(self, kw, views):
+        return {"keyword": kw, "view_count": views}
+
+    def test_requires_min_two_videos_per_keyword(self):
+        videos = [
+            self._make("radium", 10000),  # only 1 video — must be excluded
+            self._make("napoleon", 5000),
+            self._make("napoleon", 7000),
+            self._make("plague", 100),
+            self._make("plague", 200),
+        ]
+        top, worst = _compute_summaries(videos)
+        kws_top = {t["keyword"] for t in top}
+        self.assertNotIn("radium", kws_top)
+        self.assertIn("napoleon", kws_top)
+        self.assertIn("plague", kws_top)
+
+    def test_top_sorted_by_avg_views_desc(self):
+        videos = [
+            self._make("a", 100), self._make("a", 100),
+            self._make("b", 1000), self._make("b", 1000),
+            self._make("c", 500), self._make("c", 500),
+        ]
+        top, _ = _compute_summaries(videos)
+        self.assertEqual([t["keyword"] for t in top], ["b", "c", "a"])
+        self.assertEqual(top[0]["avg_views"], 1000)
+
+    def test_unknown_keyword_excluded(self):
+        videos = [
+            self._make("unknown", 9999), self._make("unknown", 9999),
+            self._make("real", 100), self._make("real", 100),
+        ]
+        top, _ = _compute_summaries(videos)
+        self.assertEqual([t["keyword"] for t in top], ["real"])
+
+    def test_empty_returns_empty(self):
+        top, worst = _compute_summaries([])
+        self.assertEqual(top, [])
+        self.assertEqual(worst, [])
+
+    def test_single_keyword_skips_worst(self):
+        videos = [self._make("only", 100), self._make("only", 200)]
+        top, worst = _compute_summaries(videos)
+        self.assertEqual(len(top), 1)
+        self.assertEqual(worst, [])  # no meaningful split with one keyword
+
+
+class ComputeHookSummariesTests(unittest.TestCase):
+    def test_excludes_hook_types_under_two_videos(self):
+        videos = [
+            {"hook_type": "SHOCKING_FACT", "view_count": 1000},
+            {"hook_type": "FALSE_ASSUMPTION", "view_count": 500},
+            {"hook_type": "FALSE_ASSUMPTION", "view_count": 700},
+        ]
+        result = _compute_hook_summaries(videos)
+        self.assertEqual([h["hook_type"] for h in result], ["FALSE_ASSUMPTION"])
+
+    def test_blank_hook_type_skipped(self):
+        videos = [
+            {"hook_type": "", "view_count": 1000},
+            {"hook_type": "", "view_count": 1000},
+        ]
+        self.assertEqual(_compute_hook_summaries(videos), [])
+
+    def test_sorted_desc_by_avg(self):
+        videos = [
+            {"hook_type": "A", "view_count": 100}, {"hook_type": "A", "view_count": 100},
+            {"hook_type": "B", "view_count": 800}, {"hook_type": "B", "view_count": 800},
+        ]
+        result = _compute_hook_summaries(videos)
+        self.assertEqual([h["hook_type"] for h in result], ["B", "A"])
+
+
+class BuildHintsBlockTests(unittest.TestCase):
+    def test_empty_hints_returns_empty(self):
+        self.assertEqual(_build_hints_block(""), "")
+
+    def test_non_empty_hints_wrapped_with_guidance(self):
+        block = _build_hints_block("Top: napoleon (5000 avg).")
+        self.assertIn("PERFORMANCE DATA", block)
+        self.assertIn("Top: napoleon (5000 avg).", block)
+        self.assertIn("Prefer topics", block)
 
 
 if __name__ == "__main__":

@@ -80,9 +80,27 @@ Runs the full pipeline on that topic. Works with `--no-upload`, `--no-edit`, `--
 ```bash
 py -3.12 orchestrator.py --analytics
 ```
-Fetches view counts from YouTube and prints a performance summary.
-When you next run `--refresh-topics`, this data is automatically fed to Claude
-so it generates more topics like your best performers.
+Fetches view counts from YouTube and prints a performance summary including:
+
+- **Per-video breakdown** sorted by views
+- **Top keywords** by average views (only keywords with ≥ 2 videos count, so single uploads can't skew the ranking)
+- **Hook type performance** (also gated at ≥ 2 videos)
+- **Hints sent to Claude on next `--refresh-topics`** — the exact plain-English string the next refresh will inject into the topic-generation prompt, so you can see what Claude is being told before you regenerate
+
+When you run `--refresh-topics`, that hint string is automatically prepended to Claude's prompt, telling it to bias toward your top keywords/hook types and avoid the worst ones. The string used is also saved into `topics_queue.json` (`performance_hints_used`) so you can audit later which signal shaped a given batch.
+
+```bash
+py -3.12 orchestrator.py --refresh-topics
+```
+Now also prints the hints it just sent to Claude, so the feedback loop is visible end-to-end:
+
+```
+  Hints sent to Claude:
+  ────────────────────────────────────────────────────────
+    Total channel videos analyzed: 12.
+    Top performing keywords by average views: napoleon (12,400 avg, 3 videos).
+    Hook type performance (best to worst): FALSE_ASSUMPTION (9,800 avg, 4 videos). Prefer FALSE_ASSUMPTION hooks when it fits the story.
+```
 
 ---
 
@@ -95,7 +113,8 @@ py -3.12 orchestrator.py --pick a3f2
 # Pick a specific topic, skip upload
 py -3.12 orchestrator.py --pick a3f2 --no-upload
 
-# Wipe the entire topic queue and immediately generate a fresh one (asks for confirmation)
+# Wipe the entire topic queue and immediately generate a fresh one (asks for confirmation).
+# Like --refresh-topics, this uses the latest analytics hints and prints them back so you can see what Claude was told.
 py -3.12 orchestrator.py --clear-topics
 
 # Remove a single topic from the queue by ID (asks for confirmation)

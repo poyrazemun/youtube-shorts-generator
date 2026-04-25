@@ -377,6 +377,7 @@ def refresh_queue(performance_hints: str = "") -> int:
     queue = {
         "generated_at": _utcnow(),
         "generated_with_hints": bool(performance_hints),
+        "performance_hints_used": performance_hints or "",
         "topics": final_topics,
     }
     save_queue(queue)

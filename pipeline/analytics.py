@@ -20,6 +20,7 @@ logger = logging.getLogger(__name__)
 
 _STATS_BATCH_SIZE = 50  # YouTube API max IDs per videos.list call
 _HINTS_MAX_AGE_HOURS = 24
+_MIN_VIDEOS_FOR_RANKING = 2  # require ≥2 videos before a keyword is treated as signal
 
 
 # ── Auth ──────────────────────────────────────────────────────────────────────
@@ -235,10 +236,16 @@ def _fetch_stats_batch(service, video_ids: list[str]) -> list[dict]:
 
 
 def _compute_summaries(videos: list[dict]) -> tuple[list[dict], list[dict]]:
-    """Return (top_keywords, worst_keywords) sorted by avg views."""
+    """
+    Return (top_keywords, worst_keywords) sorted by avg views.
+    Only keywords with ≥_MIN_VIDEOS_FOR_RANKING videos are included so
+    single-video flukes don't poison the signal sent to Claude.
+    """
     kw_stats: dict = defaultdict(lambda: {"total_views": 0, "count": 0})
     for v in videos:
         kw = v.get("keyword", "unknown")
+        if kw == "unknown":
+            continue
         kw_stats[kw]["total_views"] += v["view_count"]
         kw_stats[kw]["count"] += 1
 
@@ -250,10 +257,14 @@ def _compute_summaries(videos: list[dict]) -> tuple[list[dict], list[dict]]:
                 "video_count": v["count"],
             }
             for k, v in kw_stats.items()
+            if v["count"] >= _MIN_VIDEOS_FOR_RANKING
         ],
         key=lambda x: x["avg_views"],
         reverse=True,
     )
+    if len(ranked) < 2:
+        # Not enough signal to draw a top/worst split — return only top.
+        return ranked[:5], []
     return ranked[:5], ranked[-5:]
 
 

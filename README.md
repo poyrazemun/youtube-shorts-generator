@@ -148,6 +148,17 @@ Keywords from already-uploaded videos (tracked in `video_registry.json`) are aut
 
 If a pipeline run crashes or is interrupted, the topic stays `in_progress`. On the next `--refresh-topics`, any `in_progress` entry older than 2 hours is automatically reset to `failed` and replaced with fresh topics.
 
+### Analytics Feedback Loop
+
+`--analytics` fetches view/like counts for every uploaded video and saves them to `output/analytics.json` along with two derived signals (each requires ≥ 2 videos to be considered, so single uploads can't poison the ranking):
+
+- **Top / worst keywords** — average views grouped by `keyword`
+- **Hook type performance** — average views grouped by the `hook_type` Claude tagged on each script
+
+The next time `--refresh-topics` runs, those signals are flattened into a plain-English hint string and injected into Claude's topic-generation prompt — for example: _"Top performing keywords by average views: napoleon (12,400 avg, 3 videos). Hook type performance: FALSE_ASSUMPTION (9,800 avg, 4 videos). Prefer FALSE_ASSUMPTION hooks when it fits the story."_ Claude is told to bias new topics toward winning patterns and avoid losing ones.
+
+The exact hint string Claude received is persisted into `topics_queue.json` as `performance_hints_used`, so you can audit afterwards which signal shaped the queue. Both `--analytics` and `--refresh-topics` now print the hint string they are about to send so the loop is visible from the CLI.
+
 ---
 
 ## Hook Formulas
