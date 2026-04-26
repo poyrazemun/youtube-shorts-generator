@@ -92,7 +92,7 @@ Switching to HuggingFace saves about 80% per video. The Replicate path is the sa
   Step 4   tts_generator.py      Kokoro neural TTS → narration audio (fallback: Piper → Coqui → Edge TTS)
   Step 5a  captions.py           Whisper / estimation → word-timed subtitles
   Step 5b  video_assembler.py    ffmpeg → 1080×1920 MP4 with burned captions + CTA overlay + background music
-  Step 6   youtube_uploader.py   YouTube Data API v3 → upload with thumbnail
+  Step 6   youtube_uploader.py   YouTube Data API v3 → upload video
        ↓
 --analytics             Fetches view counts, feeds performance data back into topic generation
 ```
@@ -384,7 +384,7 @@ Omitting `--preset` uses `config.DEFAULT_SCENE_PRESET` (defaults to
 - **Duration**: 20–30 seconds
 - **Subtitles**: Burned in, white bold text, semi-transparent background box, positioned above YouTube Shorts UI. Whisper captions use shorter 3-word cards for faster pacing, while the estimation fallback keeps larger cards for smoother reading.
 - **CTA Overlay**: "Follow @ThatActuallyHappened11" — white text, top-center, appears in last 3 seconds
-- **Thumbnail**: 1280×720 PNG, uploaded to YouTube
+- **Thumbnail**: auto-selected by YouTube from a video frame
 
 ---
 
@@ -400,7 +400,6 @@ output/
     audio/            step 4 — narration WAV
     subtitles/        step 5a — .ass + .srt caption files
     video/            step 5b — assembled MP4
-    thumbnails/       step 6 — YouTube thumbnail
     uploads.json      step 6 — video IDs + URLs
     state.json        per-step completion ledger
 

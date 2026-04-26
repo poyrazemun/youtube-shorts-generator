@@ -256,7 +256,7 @@ To run daily without touching your PC:
 | 4    | Voice Generation  | Kokoro neural TTS (auto-fallback: Piper → Coqui → Edge TTS)     |
 | 5a   | Captions          | Whisper word timestamps or estimation-based SRT                 |
 | 5b   | Video Assembly    | ffmpeg: images + audio + captions + "Follow @ThatActuallyHappened11" overlay |
-| 6    | YouTube Upload    | Uploads video + thumbnail to your channel                       |
+| 6    | YouTube Upload    | Uploads video to your channel (YouTube auto-selects thumbnail)  |
 
 All steps are **resumable** — if a step fails, re-run the same command and it continues from where it stopped.
 
@@ -283,7 +283,6 @@ output/
     audio/            ← TTS narration audio
     subtitles/        ← captions (.ass + .srt)
     video/            ← final .mp4 files
-    thumbnails/       ← YouTube thumbnails (1280x720)
     uploads.json      ← upload results with YouTube video URLs
     safety.json       ← per-script verdicts from the content-safety pre-check
     cost.json         ← per-step timings + token usage + image counts + USD totals (gitignored)

@@ -101,7 +101,6 @@ YOUTUBE_PRIVACY = os.getenv("YOUTUBE_PRIVACY", "private")  # start private for s
 YOUTUBE_SCOPES = [
     "https://www.googleapis.com/auth/youtube.upload",
     "https://www.googleapis.com/auth/youtube.readonly",
-    "https://www.googleapis.com/auth/youtube.force-ssl",  # required for posting comments
 ]
 
 # ── Logging ───────────────────────────────────────────────────────────────────

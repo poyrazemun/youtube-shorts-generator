@@ -157,32 +157,6 @@ def _upload_video(service, video_path: Path, script: dict) -> dict:
     }
 
 
-def _post_pin_comment(service, video_id: str, comment_text: str) -> None:
-    """
-    Post a comment on the video as the channel owner.
-    This becomes the first visible comment — drives replies which boost the algorithm.
-    Note: auto-pinning is not available via YouTube API; pin manually in YouTube Studio.
-    """
-    try:
-        service.commentThreads().insert(
-            part="snippet",
-            body={
-                "snippet": {
-                    "videoId": video_id,
-                    "topLevelComment": {
-                        "snippet": {
-                            "textOriginal": comment_text,
-                        }
-                    }
-                }
-            }
-        ).execute()
-        logger.info(f"[youtube_uploader] Posted comment on {video_id}: {comment_text[:80]}...")
-        logger.info("[youtube_uploader] ⚠ Pin this comment manually in YouTube Studio → Comments")
-    except Exception as e:
-        logger.warning(f"[youtube_uploader] Comment post failed for {video_id}: {e}")
-
-
 def _append_to_registry(entry: dict) -> None:
     """Persist video_id + metadata to video_registry.json (never cleared, committed to git)."""
     registry = []
@@ -206,7 +180,6 @@ def upload_all_videos(
     video_paths: list[Path],
     scripts: list[dict],
     slug: str,
-    thumbnail_paths: list | None = None,
     topic: str = "",
     keyword: str = "",
 ) -> list[dict]:
@@ -255,27 +228,6 @@ def upload_all_videos(
             result = _upload_video(service, video_path, script)
             result["event_index"] = idx
             upload_results.append(result)
-
-            # Upload thumbnail if available
-            thumb_path = (
-                thumbnail_paths[loop_i]
-                if thumbnail_paths and loop_i < len(thumbnail_paths)
-                else None
-            )
-            if thumb_path and Path(thumb_path).exists():
-                try:
-                    from googleapiclient.http import MediaFileUpload
-                    media_thumb = MediaFileUpload(str(thumb_path), mimetype="image/png")
-                    service.thumbnails().set(
-                        videoId=result["video_id"], media_body=media_thumb
-                    ).execute()
-                    logger.info(f"[youtube_uploader] Thumbnail set for video {result['video_id']}")
-                except Exception as thumb_err:
-                    logger.warning(f"[youtube_uploader] Thumbnail upload failed for event {idx}: {thumb_err}")
-
-            # Post engagement comment (drives replies → algorithm signal)
-            pin_comment = script.get("pin_comment", "Which part of this story shocked you most? 👇")
-            _post_pin_comment(service, result["video_id"], pin_comment)
 
             # Save after each upload to preserve progress
             with open(results_path, "w") as f:

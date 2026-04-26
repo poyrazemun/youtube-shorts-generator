@@ -39,7 +39,6 @@ from pipeline.presets import DEFAULT_PRESET, list_presets
 from pipeline.scene_planner import plan_all as plan_all_scenes
 from pipeline.script_generator import generate_scripts
 from pipeline.state import PipelineState
-from pipeline.thumbnail import generate_thumbnail
 from pipeline.tts_generator import generate_audio, get_audio_duration
 from pipeline.video_assembler import assemble_all_videos
 from pipeline.youtube_uploader import upload_all_videos
@@ -78,7 +77,6 @@ def _build_dry_run_payload() -> tuple[list[dict], list[dict]]:
         "twist": "Authorities hired musicians thinking music would help — it only made it worse.",
         "ending_fact": "Dozens collapsed from exhaustion, and no one ever figured out why.",
         "full_script": _DRY_RUN_SCRIPT_TEXT,
-        "pin_comment": "Dry-run fixture — not posted.",
         "word_count": len(words),
         "estimated_seconds": 25,
         "event_index": 0,
@@ -439,25 +437,11 @@ def run_pipeline(topic: str, keyword: str, count: int, skip_upload: bool = False
     _print_step(6, "YOUTUBE UPLOAD")
     tracker.start_step("youtube_upload")
 
-    # Generate thumbnails before upload
-    thumbnail_dir = config.OUTPUT_DIR / slug / "thumbnails"
-    thumbnail_paths: list = []
-    for script in scripts:
-        try:
-            thumb = generate_thumbnail(script, thumbnail_dir)
-            thumbnail_paths.append(thumb)
-            if thumb:
-                logger.info(f"  Thumbnail: {thumb.name}")
-        except Exception as e:
-            logger.warning(f"Thumbnail generation failed for event {script.get('event_index', '?')}: {e}")
-            thumbnail_paths.append(None)
-
     try:
         upload_results = upload_all_videos(
             video_paths=video_paths,
             scripts=scripts,
             slug=slug,
-            thumbnail_paths=thumbnail_paths,
             topic=topic,
             keyword=keyword,
         )

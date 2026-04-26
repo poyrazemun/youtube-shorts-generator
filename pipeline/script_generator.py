@@ -84,7 +84,6 @@ Return ONLY this JSON (no markdown, no extra text):
   "twist": "Twist sentence here.",
   "ending_fact": "Ending fact sentence here that loops back to the hook.",
   "full_script": "Complete script as one flowing paragraph (hook + context + rehook + twist + ending_fact combined)",
-  "pin_comment": "A short engaging question specific to this story that will be pinned as the first comment to drive replies (e.g. 'Did you know about this before? What shocked you most? 👇')",
   "word_count": 0,
   "estimated_seconds": 0
 }}"""
@@ -251,7 +250,6 @@ def _validate_and_fix_script(script: dict) -> dict:
         "twist",
         "ending_fact",
         "full_script",
-        "pin_comment",
     ]
 
     list_keys = {"hashtags", "youtube_tags"}
