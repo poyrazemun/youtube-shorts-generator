@@ -34,6 +34,11 @@ from pipeline.content_safety import check_all as check_scripts_safety
 from pipeline.event_discovery import discover_events
 from pipeline.image_generator import generate_images
 from pipeline.log import get_logger, set_verbose
+from pipeline.manual_images import (
+    MissingManualImageError,
+    verify_and_normalize as verify_manual_images,
+    write_prompt_pack,
+)
 from pipeline.music import select_track
 from pipeline.presets import DEFAULT_PRESET, list_presets
 from pipeline.scene_planner import plan_all as plan_all_scenes
@@ -115,6 +120,12 @@ def _print_step(n: int | float, name: str):
 # failure) so --auto / --pick can mark the topic failed with a specific reason.
 _SAFETY_EXIT_CODE = 42
 
+# Exit code used when --manual-images pauses the pipeline to wait for the user
+# to drop externally-generated PNGs into the images folder. Distinct from 1
+# (failure) and 42 (safety halt) so --pick / --auto know not to mark the topic
+# failed — re-running with the same --pick <id> resumes once images are present.
+_MANUAL_PAUSE_EXIT_CODE = 43
+
 # Sidecar file the safety step writes when it halts. --auto/--pick reads it
 # (then deletes) so the topic-queue failure reason captures *what* was violated
 # rather than just "pipeline sys.exit(42)".
@@ -158,7 +169,7 @@ def _print_results(upload_results: list):
     print()
 
 
-def run_pipeline(topic: str, keyword: str, count: int, skip_upload: bool = False, verbose: bool = False, no_edit: bool = False, preset: str | None = None, dry_run: bool = False):
+def run_pipeline(topic: str, keyword: str, count: int, skip_upload: bool = False, verbose: bool = False, no_edit: bool = False, preset: str | None = None, dry_run: bool = False, manual_images: bool = False):
     """
     Execute the full pipeline end-to-end.
 
@@ -310,13 +321,48 @@ def run_pipeline(topic: str, keyword: str, count: int, skip_upload: bool = False
     _print_step(3, "IMAGE GENERATION")
     tracker.start_step("image_generation")
     try:
-        all_image_paths = generate_images(
-            scripts=scripts, slug=slug, scene_plans=scene_plans or None
-        )
-        total_images = sum(len(imgs) for imgs in all_image_paths)
-        logger.info(f"Step 3 complete: {total_images} images generated across {len(scripts)} events.")
-        for s, imgs in zip(scripts, all_image_paths, strict=True):
-            state.complete(s.get("event_index", 0), "images", [str(p) for p in imgs])
+        if manual_images:
+            try:
+                all_image_paths = verify_manual_images(
+                    scripts=scripts, scene_plans=scene_plans or [], slug=slug,
+                )
+                total_images = sum(len(imgs) for imgs in all_image_paths)
+                logger.info(
+                    f"Step 3 complete (manual): {total_images} images verified across {len(scripts)} events."
+                )
+                for s, imgs in zip(scripts, all_image_paths, strict=True):
+                    state.complete(s.get("event_index", 0), "images", [str(p) for p in imgs])
+            except MissingManualImageError as miss:
+                write_prompt_pack(scripts=scripts, scene_plans=scene_plans or [], slug=slug)
+                print("\n" + "═" * 60)
+                print("  MANUAL IMAGE MODE — PIPELINE PAUSED")
+                print("═" * 60)
+                print(f"  {len(miss.missing)} image(s) still missing.")
+                print("  Open `prompts.md` in each event folder, generate the images,")
+                print("  and save them as `img_0.png` … `img_N.png` next to it.")
+                print()
+                print("  Drop folders:")
+                seen_dirs = []
+                for p in miss.missing:
+                    if p.parent not in seen_dirs:
+                        seen_dirs.append(p.parent)
+                for d in seen_dirs:
+                    print(f"    {d}")
+                print()
+                print("  When done, re-run the same command to resume.")
+                print()
+                _finalize_cost_tracking(tracker, logger, completed=False)
+                sys.exit(_MANUAL_PAUSE_EXIT_CODE)
+        else:
+            all_image_paths = generate_images(
+                scripts=scripts, slug=slug, scene_plans=scene_plans or None
+            )
+            total_images = sum(len(imgs) for imgs in all_image_paths)
+            logger.info(f"Step 3 complete: {total_images} images generated across {len(scripts)} events.")
+            for s, imgs in zip(scripts, all_image_paths, strict=True):
+                state.complete(s.get("event_index", 0), "images", [str(p) for p in imgs])
+    except SystemExit:
+        raise
     except Exception as e:
         logger.error(f"Step 3 FAILED: {e}")
         state.fail(0, "images", str(e))
@@ -568,6 +614,17 @@ Examples:
         ),
     )
     parser.add_argument(
+        "--manual-images",
+        action="store_true",
+        dest="manual_images",
+        help=(
+            "Pause the pipeline after scene planning. Writes a prompts.md per "
+            "event so you can generate images externally (Midjourney/DALL-E/etc) "
+            "and drop them in as img_0.png … img_N.png. Re-run the same command "
+            "to resume; missing images error instead of falling back to PIL."
+        ),
+    )
+    parser.add_argument(
         "--preset",
         default=None,
         choices=list_presets(),
@@ -783,10 +840,17 @@ Examples:
                 verbose=args.verbose,
                 no_edit=args.no_edit,
                 preset=args.preset,
+                manual_images=args.manual_images,
             )
             topic_discovery.mark_topic_done(entry["id"], slug)
             logger.info(f"[pick] Topic '{entry['keyword']}' complete.")
         except SystemExit as exc:
+            if exc.code == _MANUAL_PAUSE_EXIT_CODE:
+                logger.info(
+                    f"[pick] Topic '{entry['keyword']}' paused for manual images "
+                    f"(id={entry['id']}). Re-run with --pick {entry['id']} --manual-images to resume."
+                )
+                raise
             reason = _consume_safety_failure_reason() if exc.code == _SAFETY_EXIT_CODE \
                 else f"pipeline sys.exit({exc.code})"
             topic_discovery.mark_topic_failed(entry["id"], reason)
@@ -816,10 +880,17 @@ Examples:
                 verbose=args.verbose,
                 no_edit=args.no_edit,
                 preset=args.preset,
+                manual_images=args.manual_images,
             )
             topic_discovery.mark_topic_done(entry["id"], slug)
             logger.info(f"[auto] Topic '{entry['keyword']}' complete.")
         except SystemExit as exc:
+            if exc.code == _MANUAL_PAUSE_EXIT_CODE:
+                logger.info(
+                    f"[auto] Topic '{entry['keyword']}' paused for manual images "
+                    f"(id={entry['id']}). Re-run with --pick {entry['id']} --manual-images to resume."
+                )
+                raise
             reason = _consume_safety_failure_reason() if exc.code == _SAFETY_EXIT_CODE \
                 else f"pipeline sys.exit({exc.code})"
             topic_discovery.mark_topic_failed(entry["id"], reason)
@@ -837,6 +908,7 @@ Examples:
             no_edit=args.no_edit,
             preset=args.preset,
             dry_run=args.dry_run,
+            manual_images=args.manual_images,
         )
 
 
