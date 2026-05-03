@@ -43,6 +43,14 @@ YOUTUBE_CREDENTIALS_FILE = os.getenv(
 CLAUDE_MODEL = "claude-sonnet-4-6"
 CLAUDE_MAX_TOKENS = 4096
 
+# Lightweight model for translation. Localizations are a low-tier task (formal
+# title/description translation) that doesn't need Sonnet — Haiku is ~5× cheaper.
+CLAUDE_TRANSLATION_MODEL = "claude-haiku-4-5-20251001"
+
+# YouTube `localizations` target languages. BCP-47 codes. Picked for Shorts
+# reach: high-population markets where English titles otherwise hide the video.
+LOCALIZATION_LANGUAGES = ["es", "pt", "hi", "id"]
+
 # ── Image Generation ──────────────────────────────────────────────────────────
 IMAGES_PER_EVENT = 5
 IMAGE_WIDTH = 608  # 9:16 friendly width for SD (multiple of 64)
@@ -96,11 +104,15 @@ SUBTITLE_OUTLINE_COLOR = "black"
 SUBTITLE_OUTLINE_WIDTH = 3
 
 # ── YouTube ───────────────────────────────────────────────────────────────────
-YOUTUBE_CATEGORY_ID = "27"  # Education
+YOUTUBE_CATEGORY_ID = "24"  # Entertainment
 YOUTUBE_PRIVACY = os.getenv("YOUTUBE_PRIVACY", "private")  # start private for safety
 YOUTUBE_SCOPES = [
     "https://www.googleapis.com/auth/youtube.upload",
     "https://www.googleapis.com/auth/youtube.readonly",
+    # force-ssl is required for captions.insert (uploading SRT as a real
+    # caption track, not just burned pixels). Changing this list invalidates
+    # any existing credentials.json — re-auth in the browser on next run.
+    "https://www.googleapis.com/auth/youtube.force-ssl",
 ]
 
 # ── Logging ───────────────────────────────────────────────────────────────────
@@ -121,15 +133,15 @@ ANALYTICS_PATH = OUTPUT_DIR / "analytics.json"
 # Source: https://www.anthropic.com/pricing
 CLAUDE_PRICING: dict[str, dict[str, float]] = {
     "claude-sonnet-4-6": {"input": 3.0, "output": 15.0},
-    "claude-opus-4-7":   {"input": 15.0, "output": 75.0},
-    "claude-haiku-4-5":  {"input": 1.0, "output": 5.0},
+    "claude-opus-4-7": {"input": 15.0, "output": 75.0},
+    "claude-haiku-4-5": {"input": 1.0, "output": 5.0},
 }
 
 # Per-image USD rate by image-generation provider.
 # Replicate FLUX.1-dev is ~$0.025/image. HuggingFace is free on the inference
 # API. PIL is the offline placeholder fallback (always free).
 IMAGE_PRICING: dict[str, float] = {
-    "replicate":   float(os.getenv("IMAGE_COST_REPLICATE", "0.025")),
+    "replicate": float(os.getenv("IMAGE_COST_REPLICATE", "0.025")),
     "huggingface": float(os.getenv("IMAGE_COST_HUGGINGFACE", "0.0")),
-    "pil":         0.0,
+    "pil": 0.0,
 }

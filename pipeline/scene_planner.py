@@ -79,21 +79,28 @@ def _build_image_prompt(
     fragment: str,
     event: dict[str, Any],
     preset: Preset,
+    scene_visual: str = "",
 ) -> str:
-    """Role-aware, preset-aware image prompt."""
+    """Role-aware, preset-aware image prompt.
+
+    `scene_visual` is the per-scene visual description from the script (one
+    distinct visual per beat). When empty, falls back to the event-level
+    visual_theme — preserving behavior for old cached scripts that pre-date
+    the per-scene visuals feature."""
     direction = _ROLE_DIRECTION_FALLBACK[role]
     role_dir = preset.for_role(role)
     year = event.get("year", "historical")
     location = event.get("location", "")
-    visual_theme = event.get("visual_theme", event.get("event", ""))
     location_clause = f" in {location}" if location else ""
+
+    visual = scene_visual.strip() or event.get("visual_theme", event.get("event", ""))
 
     prefix = role_dir.prompt_emphasis or direction["framing"]
     look = role_dir.style_tokens or direction["look"]
     fragment_clause = f"{fragment}, " if fragment else ""
 
     return (
-        f"{prefix}, {visual_theme}, {year}{location_clause}, "
+        f"{prefix}, {visual}, {year}{location_clause}, "
         f"{fragment_clause}{look}, {config.IMAGE_STYLE_PROMPT}"
     )
 
@@ -147,12 +154,16 @@ def plan_scenes(
     durations = _scene_durations(weights, audio_duration)
 
     # 2. Build SceneSpecs
+    scene_visuals = script.get("scene_visuals") or {}
     scenes: list[SceneSpec] = []
     cursor = 0.0
     for i, (role, text, dur) in enumerate(zip(roles_present, texts, durations)):
         role_dir = preset.for_role(role)
         fragment = _visual_fragment(text)
-        img_prompt = _build_image_prompt(role, fragment, event, preset)
+        per_scene_visual = str(scene_visuals.get(role, "") or "")
+        img_prompt = _build_image_prompt(
+            role, fragment, event, preset, scene_visual=per_scene_visual
+        )
 
         scenes.append(SceneSpec(
             index=i,
@@ -165,6 +176,7 @@ def plan_scenes(
                 "framing": _ROLE_DIRECTION_FALLBACK[role]["framing"],
                 "style_tokens": role_dir.style_tokens,
                 "prompt_emphasis": role_dir.prompt_emphasis,
+                "scene_visual": per_scene_visual,
             },
         ))
         cursor += dur

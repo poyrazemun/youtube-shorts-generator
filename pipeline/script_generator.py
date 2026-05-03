@@ -14,6 +14,7 @@ from anthropic.types import TextBlock
 
 import config
 from pipeline import cost_tracker
+from pipeline.localizer import generate_localizations
 from pipeline.research import research_topic
 from pipeline.retry import with_retry
 
@@ -71,6 +72,21 @@ YouTube Safe Distribution rules (CRITICAL — violations cause demotion):
 - Titles must be accurate — never overpromise what the video contains
 - NEVER generate content about: suicide methods, sexual violence, child harm, terrorism glorification
 
+SCENE VISUALS — CRITICAL FOR IMAGE DIVERSITY:
+For each of the 5 script beats, write a DIFFERENT visual scene description (one
+per beat). These feed directly into image generators. Image models pattern-match
+on the dominant visual subject — if all 5 visuals describe the same setting, the
+generator will produce 5 nearly-identical images.
+
+Each scene_visuals entry must:
+- Describe a DIFFERENT moment, location, perspective, or subject than the others
+  (e.g. wide establishing shot of the empire → close-up of a single object →
+  intimate portrait of a person → action moment → quiet aftermath)
+- Be specific and sensory: name objects, materials, lighting, gestures.
+- Be ONE sentence, 12-25 words.
+- Avoid abstract concepts ("power", "fear") — describe what a CAMERA would see.
+- NOT mention text, logos, captions, or modern objects.
+
 Return ONLY this JSON (no markdown, no extra text):
 {{
   "title": "Keyword-first title under 60 chars with year",
@@ -84,6 +100,13 @@ Return ONLY this JSON (no markdown, no extra text):
   "twist": "Twist sentence here.",
   "ending_fact": "Ending fact sentence here that loops back to the hook.",
   "full_script": "Complete script as one flowing paragraph (hook + context + rehook + twist + ending_fact combined)",
+  "scene_visuals": {{
+    "hook": "Distinct visual moment for the hook beat — what the camera sees.",
+    "context": "Different visual moment establishing the setup — different setting, framing, or subject than the hook.",
+    "rehook": "Different visual that reframes the stakes — close-up, object, or shift in scale from the previous scenes.",
+    "twist": "Pivotal visual moment that shows the surprise — distinct subject or action.",
+    "ending": "Quiet closing visual — different from all previous, with negative space."
+  }},
   "word_count": 0,
   "estimated_seconds": 0
 }}"""
@@ -196,6 +219,22 @@ def generate_scripts(
             # Attach source event metadata
             script["event_index"] = idx
             script["source_event"] = event
+
+            # Generate localizations now so they're cached in scripts.json
+            # alongside the rest of the script. Failures degrade gracefully:
+            # the upload will just go out with English-only metadata.
+            try:
+                script["localizations"] = generate_localizations(
+                    script.get("title", ""),
+                    script.get("description", ""),
+                    client,
+                )
+            except Exception as e:
+                logger.warning(
+                    f"[script_generator] Localization step failed for event {idx}: {e}"
+                )
+                script["localizations"] = {}
+
             scripts.append(script)
 
             logger.info(
@@ -298,6 +337,17 @@ def _validate_and_fix_script(script: dict) -> dict:
     # Clamp description to YouTube's 5000 char limit (safety net)
     if len(script.get("description", "")) > 5000:
         script["description"] = script["description"][:4997] + "..."
+
+    # Normalize scene_visuals — must be a dict keyed by role. Old cached
+    # scripts may not have it; downstream code (scene_planner) falls back to
+    # event.visual_theme when a role is missing here.
+    sv = script.get("scene_visuals")
+    if not isinstance(sv, dict):
+        sv = {}
+    script["scene_visuals"] = {
+        role: str(sv.get(role, "") or "").strip()
+        for role in ("hook", "context", "rehook", "twist", "ending")
+    }
 
     # Clamp total youtube_tags to ~500 chars (YouTube tag limit)
     tags = script.get("youtube_tags", [])

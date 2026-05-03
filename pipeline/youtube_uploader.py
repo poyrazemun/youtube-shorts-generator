@@ -8,10 +8,17 @@ Subsequent runs use stored credentials (auto-refresh).
 import json
 import logging
 import os
+import re
 from pathlib import Path
 
 import config
 from pipeline.retry import with_retry
+
+# YouTube renders the first 3 hashtags found in the title as a clickable
+# "category chip" above the title. We prepend up to this many normalized
+# hashtags to claim that surface for discovery.
+_TITLE_HASHTAG_COUNT = 3
+_TITLE_MAX_CHARS = 100
 
 logger = logging.getLogger(__name__)
 
@@ -80,6 +87,125 @@ def _get_authenticated_service():
     return service
 
 
+_TAGS_MAX_CHARS = 500  # YouTube's hard limit on the combined tag string
+
+
+def _build_youtube_tags(
+    youtube_tags: list[str], location: str, year: str | int
+) -> list[str]:
+    """Combine Claude-supplied tags with our standard suffix (location, year,
+    "unreal history"), deduplicate case-insensitively, strip empties, and
+    clamp the total to YouTube's 500-char ceiling.
+
+    Order is preserved (first occurrence wins) so Claude's keyword-ranked tags
+    keep their priority. The suffix tags only land if there's budget left."""
+    raw = list(youtube_tags or []) + [
+        "unreal history",
+        str(location or "").strip(),
+        str(year or "").strip(),
+    ]
+
+    out: list[str] = []
+    seen: set[str] = set()
+    total = 0
+    for t in raw:
+        if not t:
+            continue
+        norm = str(t).strip()
+        if not norm:
+            continue
+        key = norm.lower()
+        if key in seen:
+            continue
+        # Approximation matching script_generator's clamp: each tag costs
+        # len + 1 (separator). Conservative — YouTube also adds quotes for
+        # tags containing spaces, but staying under 500 here gives headroom.
+        cost = len(norm) + 1
+        if total + cost > _TAGS_MAX_CHARS:
+            continue
+        seen.add(key)
+        out.append(norm)
+        total += cost
+    return out
+
+
+def _build_description_hashtags(
+    claude_hashtags: list[str], suffix_hashtags: list[str]
+) -> list[str]:
+    """Merge Claude's hashtags with our hardcoded suffix into a single ordered,
+    case-insensitive deduplicated list. Each tag is normalized to a YouTube-safe
+    CamelCase token. Claude's hashtags come first to preserve their relevance
+    ranking; suffix tags only land if not already present."""
+    out: list[str] = []
+    seen: set[str] = set()
+    for raw in list(claude_hashtags or []) + list(suffix_hashtags or []):
+        if not raw:
+            continue
+        norm = _normalize_hashtag(str(raw))
+        if not norm:
+            continue
+        key = norm.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(norm)
+    return out
+
+
+def _normalize_hashtag(tag: str) -> str:
+    """Convert a free-form tag into a YouTube-safe hashtag token (CamelCase,
+    alphanumeric only). Returns "" if nothing usable remains."""
+    parts = re.findall(r"[A-Za-z0-9]+", tag)
+    if not parts:
+        return ""
+
+    def _shape(p: str) -> str:
+        if p.isupper():
+            return p  # acronym: "WW2", "NASA"
+        if p[0].isupper() and any(c.isupper() for c in p[1:]):
+            return p  # already CamelCase: "UnrealHistory"
+        return p.capitalize()
+
+    return "".join(_shape(p) for p in parts)
+
+
+def _build_title_with_hashtags(title: str, hashtags: list[str]) -> str:
+    """Prepend up to _TITLE_HASHTAG_COUNT normalized hashtags to the title to
+    claim YouTube's title hashtag chip. Drops tags as needed to fit the 100-char
+    ceiling; if even one tag plus the original title overflows, the title is
+    truncated rather than skipping the chip entirely."""
+    seen: set[str] = set()
+    candidates: list[str] = []
+    for raw in hashtags:
+        if not raw:
+            continue
+        norm = _normalize_hashtag(str(raw))
+        key = norm.lower()
+        if not norm or key in seen:
+            continue
+        seen.add(key)
+        candidates.append(norm)
+        if len(candidates) >= _TITLE_HASHTAG_COUNT:
+            break
+
+    # Try the largest hashtag set that fits. Keep the original title intact
+    # if possible; only fall back to truncation when no set fits.
+    for n in range(len(candidates), 0, -1):
+        prefix = " ".join(f"#{t}" for t in candidates[:n]) + " "
+        if len(prefix) + len(title) <= _TITLE_MAX_CHARS:
+            return prefix + title
+
+    if candidates:
+        prefix = f"#{candidates[0]} "
+        budget = _TITLE_MAX_CHARS - len(prefix)
+        if budget >= 4:
+            return prefix + title[: budget - 3] + "..."
+
+    if len(title) > _TITLE_MAX_CHARS:
+        title = title[: _TITLE_MAX_CHARS - 3] + "..."
+    return title
+
+
 @with_retry(max_retries=3, base_delay=2)
 def _upload_video(service, video_path: Path, script: dict) -> dict:
     """
@@ -95,19 +221,23 @@ def _upload_video(service, video_path: Path, script: dict) -> dict:
     description = script.get("description", "")
     hashtags = script.get("hashtags", [])
 
-    # Build description with hashtags appended
-    hashtag_str = " ".join(f"#{tag}" for tag in hashtags if tag)
-    full_description = f"{description}\n\n{hashtag_str}\n\n#UnrealHistory #Shorts #History"
+    # Build description hashtag block. Combine Claude's suggestions with our
+    # standard suffix, normalize each tag (CamelCase, alnum-only), and de-dupe
+    # case-insensitively so we never ship "#history #History" or "#shorts #Shorts".
+    description_hashtags = _build_description_hashtags(
+        hashtags, ["UnrealHistory", "Shorts", "History"]
+    )
+    hashtag_str = " ".join(f"#{t}" for t in description_hashtags)
+    full_description = f"{description}\n\n{hashtag_str}"
 
-    # Clamp title to YouTube's 100-char limit
-    if len(title) > 100:
-        title = title[:97] + "..."
+    title = _build_title_with_hashtags(title, hashtags)
 
     event = script.get("source_event", {})
     # Use dedicated youtube_tags if present (T1-D), otherwise fall back to hashtags
     youtube_tags = script.get("youtube_tags") or hashtags
-    tags = youtube_tags + ["unreal history", event.get("location", ""), event.get("year", "")]
-    tags = [t for t in tags if t]  # filter empty strings
+    tags = _build_youtube_tags(
+        youtube_tags, event.get("location", ""), event.get("year", "")
+    )
 
     body = {
         "snippet": {
@@ -116,12 +246,25 @@ def _upload_video(service, video_path: Path, script: dict) -> dict:
             "tags": tags,
             "categoryId": config.YOUTUBE_CATEGORY_ID,
             "defaultLanguage": "en",
+            "defaultAudioLanguage": "en",
         },
         "status": {
             "privacyStatus": config.YOUTUBE_PRIVACY,
             "selfDeclaredMadeForKids": False,
+            "license": "creativeCommon",
         },
     }
+
+    # Attach per-language title/description so YouTube serves the localized
+    # version to viewers in matching locales. Defaults to {} if the localizer
+    # step failed — YouTube simply falls back to the English snippet.
+    localizations = script.get("localizations") or {}
+    if localizations:
+        body["localizations"] = {
+            lang: {"title": entry["title"], "description": entry["description"]}
+            for lang, entry in localizations.items()
+            if isinstance(entry, dict) and entry.get("title") and entry.get("description")
+        }
 
     media = MediaFileUpload(
         str(video_path),
@@ -155,6 +298,42 @@ def _upload_video(service, video_path: Path, script: dict) -> dict:
         "title": title,
         "privacy": config.YOUTUBE_PRIVACY,
     }
+
+
+def _find_srt_path(slug: str, event_index: int) -> Path | None:
+    """Locate the SRT for a given event. Whisper path emits `{idx}_captions.srt`,
+    estimation fallback emits `{idx}.srt`. Prefer the Whisper one if present."""
+    subtitle_dir = config.OUTPUT_DIR / slug / "subtitles"
+    for name in (f"{event_index}_captions.srt", f"{event_index}.srt"):
+        p = subtitle_dir / name
+        if p.exists() and p.stat().st_size > 0:
+            return p
+    return None
+
+
+@with_retry(max_retries=3, base_delay=2)
+def _upload_caption(service, video_id: str, srt_path: Path) -> None:
+    """Upload an SRT as a real YouTube caption track via captions.insert."""
+    try:
+        from googleapiclient.http import MediaFileUpload
+    except ImportError as e:
+        raise RuntimeError("google-api-python-client not installed.") from e
+
+    body = {
+        "snippet": {
+            "videoId": video_id,
+            "language": "en",
+            "name": "English",
+            "isDraft": False,
+        }
+    }
+    media = MediaFileUpload(str(srt_path), mimetype="application/octet-stream", resumable=False)
+    request = service.captions().insert(part="snippet", body=body, media_body=media)
+    response = request.execute()
+    logger.info(
+        f"[youtube_uploader] Caption track uploaded: id={response.get('id', 'unknown')} "
+        f"({srt_path.name})"
+    )
 
 
 def _append_to_registry(entry: dict) -> None:
@@ -227,6 +406,24 @@ def upload_all_videos(
         try:
             result = _upload_video(service, video_path, script)
             result["event_index"] = idx
+
+            # Upload SRT as a real caption track. Failure here must not abort
+            # the run — the video is already up, captions are a nice-to-have.
+            srt_path = _find_srt_path(slug, idx)
+            if srt_path is None:
+                logger.warning(
+                    f"[youtube_uploader] No SRT found for event {idx} — skipping caption upload"
+                )
+            else:
+                try:
+                    _upload_caption(service, result["video_id"], srt_path)
+                    result["caption_uploaded"] = True
+                except Exception as e:
+                    logger.error(
+                        f"[youtube_uploader] Caption upload failed for {result['video_id']}: {e}"
+                    )
+                    result["caption_uploaded"] = False
+
             upload_results.append(result)
 
             # Save after each upload to preserve progress

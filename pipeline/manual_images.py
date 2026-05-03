@@ -57,18 +57,30 @@ def write_prompt_pack(scripts: list[dict], scene_plans: list, slug: str) -> list
         lines.append("")
         lines.append(f"**Title:** {script.get('title', '?')}")
         lines.append(f"**Year/Location:** {event.get('year', '?')} — {event.get('location', '?')}")
-        lines.append(f"**Visual theme:** {event.get('visual_theme', '?')}")
+        lines.append(f"**Event:** {event.get('event', '?')}")
         lines.append("")
         lines.append(f"Drop your finished PNGs in this folder as `img_0.png` … `img_{len(plan.scenes) - 1}.png`.")
         lines.append("Target size: 1080×1920 (9:16). Other sizes are auto-cropped on resume.")
+        lines.append("")
+        lines.append(
+            "Each scene below has its OWN visual — these are intentionally different "
+            "moments in the story. Do NOT collapse them into the same image."
+        )
         lines.append("")
         lines.append("---")
         lines.append("")
 
         for scene in plan.scenes:
+            hints = scene.visual_hints or {}
+            scene_visual = hints.get("scene_visual", "") or event.get("visual_theme", "")
+            framing = hints.get("framing", "")
+            style = hints.get("style_tokens", "")
+
             lines.append(f"## img_{scene.index}.png — {scene.role.upper()}")
             lines.append("")
             lines.append(f"**Narration:** {scene.text}")
+            lines.append("")
+            lines.append(f"**Visual for this scene:** {scene_visual}")
             lines.append("")
             lines.append("**Full prompt (FLUX / SDXL style):**")
             lines.append("")
@@ -76,12 +88,9 @@ def write_prompt_pack(scripts: list[dict], scene_plans: list, slug: str) -> list
             lines.append(scene.image_prompt)
             lines.append("```")
             lines.append("")
-            hints = scene.visual_hints or {}
-            framing = hints.get("framing", "")
-            style = hints.get("style_tokens", "")
             short = ", ".join(filter(None, [
                 framing,
-                event.get("visual_theme", ""),
+                scene_visual,
                 f"{event.get('year', '')} {event.get('location', '')}".strip(),
                 style,
                 "9:16 vertical, cinematic historical photograph, photorealistic",

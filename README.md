@@ -14,7 +14,10 @@ You set it up once. From then on, one command per day publishes one short. Topic
 
 - **Virality-scored topic queue** — Claude rates 25 topic ideas 1–10; only ≥7 ship, sorted best-first.
 - **Content-safety pre-check** — every script is evaluated against YouTube's demotion rules before any image-generation spend; failed scripts halt the pipeline and are marked failed in the queue.
-- **Scene-aware image prompts** — role + preset system; not 5 generic pictures, but a planned shot list (intro / context / twist / payoff).
+- **Scene-aware image prompts** — role + preset system, plus per-beat `scene_visuals` so the 5 images describe distinct moments (wide → close-up → portrait → action → aftermath) instead of 5 near-identical takes on one theme.
+- **Multi-language metadata** — title + description auto-translated to Spanish / Portuguese / Hindi / Indonesian via Haiku 4.5 and attached to the upload as YouTube `localizations`.
+- **Real caption tracks** — SRT uploaded via `captions.insert`, so the CC button in the YouTube player exposes a selectable English track (not just burned-in pixels).
+- **Title hashtag chip** — up to 3 normalized CamelCase hashtags are prepended to the title to claim YouTube's clickable title hashtag chip for discovery.
 - **Whisper-timed subtitles** — burned-in 3-word cards synced to the audio, with a CTA overlay in the last 3 seconds.
 - **Analytics feedback loop** — `--analytics` summarises which keywords and hook types perform best; those signals are injected into the next `--refresh-topics` prompt.
 - **Per-run cost + timing tracker** — `output/<slug>/cost.json` + a chronological `cost_ledger.txt` with running totals.
@@ -67,6 +70,7 @@ The pipeline is a six-step CLI: pick a topic from the scored queue, write the sc
 | Component | Cost |
 |---|---|
 | Claude (event + script + content safety, Sonnet 4.6) | ~$0.03 |
+| Claude localizations (title + description × 4 languages, Haiku 4.5) | ~$0.005 |
 | Image generation — HuggingFace FLUX.1-schnell (`HUGGINGFACE_API_TOKEN` set) | **Free** |
 | Image generation — Replicate FLUX.1-dev (5 × $0.025) | $0.125 |
 | Kokoro TTS, captions, ffmpeg assembly, YouTube upload | Free |
@@ -86,13 +90,14 @@ Switching to HuggingFace saves about 80% per video. The Replicate path is the sa
 --auto (run daily via Windows Task Scheduler)
        ↓
   Step 1   event_discovery.py    Claude → 1 strange historical event
-  Step 2   script_generator.py   Claude + DuckDuckGo research → viral script with hook formula + rehook + loopable ending + SEO metadata
+  Step 2   script_generator.py   Claude + DuckDuckGo research → viral script with hook formula + rehook + loopable ending + per-beat scene_visuals + SEO metadata
+  Step 2b  localizer.py          Haiku 4.5 → es/pt/hi/id title + description, cached in scripts.json
   Step 2.5 content_safety.py     Claude evaluates the script vs. YouTube demotion rules; halts before image spend on a fail
   Step 3   image_generator.py    FLUX (HuggingFace schnell, or Replicate dev) → 5 cinematic 9:16 images
   Step 4   tts_generator.py      Kokoro neural TTS → narration audio (fallback: Piper → Coqui → Edge TTS)
   Step 5a  captions.py           Whisper / estimation → word-timed subtitles
   Step 5b  video_assembler.py    ffmpeg → 1080×1920 MP4 with burned captions + CTA overlay + background music
-  Step 6   youtube_uploader.py   YouTube Data API v3 → upload video
+  Step 6   youtube_uploader.py   YouTube Data API v3 → upload video + SRT caption track + localized metadata + title hashtag chip
        ↓
 --analytics             Fetches view counts, feeds performance data back into topic generation
 ```
@@ -394,7 +399,7 @@ Omitting `--preset` uses `config.DEFAULT_SCENE_PRESET` (defaults to
 output/
   <slug>/
     events.json       step 1 — discovered event
-    scripts.json      step 2 — script + SEO metadata + hook_type
+    scripts.json      step 2 — script + SEO metadata + hook_type + scene_visuals + localizations (es/pt/hi/id)
     scene_plans/      step 2.5 — per-event ScenePlan JSON (role-aware scenes + prompts)
     images/           step 3 — one PNG per scene + img_N.txt sidecar with the exact prompt sent to the backend
     audio/            step 4 — narration WAV

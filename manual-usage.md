@@ -69,12 +69,21 @@ you resume.
 Open the `prompts.md` file in the printed folder. It contains, for each scene:
 
 - The narration line (so you know what the scene is about)
+- A **Visual for this scene** line — the camera subject for THIS specific beat
 - A **full prompt** (best for FLUX, SDXL, Stable Diffusion)
 - A **short prompt** (best for Midjourney, DALL-E, ChatGPT image gen)
 - The scene role (HOOK / CONTEXT / REHOOK / TWIST / ENDING)
 
 Pick whichever prompt format your tool prefers, paste it in, and generate the
 image. You can mix tools across scenes — there's no enforcement.
+
+> **Each scene has a *different* visual.** Earlier versions used a single
+> "visual theme" for the entire video, which caused image generators
+> (especially ChatGPT/DALL-E) to produce 5 nearly-identical pictures. Now
+> Claude writes a distinct visual subject per beat — wide establishing shot,
+> close-up of a key object, intimate portrait, action moment, quiet
+> aftermath. **Do not** paste the same prompt for multiple scenes; each
+> prompt is intentionally different.
 
 **Target size:** 1080×1920 (9:16 portrait). Other sizes get auto-cropped on
 resume, so you don't have to be exact — but anything close to portrait works

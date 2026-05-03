@@ -251,12 +251,13 @@ To run daily without touching your PC:
 | Step | Name              | What it does                                                    |
 |------|-------------------|-----------------------------------------------------------------|
 | 1    | Event Discovery   | Claude finds 1 strange real historical event                    |
-| 2    | Script Generation | Claude writes a viral 20–30s script using one of 5 hook formulas plus a rehook and loop-aware ending |
+| 2    | Script Generation | Claude writes a viral 20–30s script using one of 5 hook formulas plus a rehook and loop-aware ending. Also outputs a `scene_visuals` block — one distinct camera-subject description per beat — so the 5 images aren't visual duplicates of each other. |
+| 2b   | Localization      | Haiku 4.5 translates title + description into es / pt / hi / id and caches them in `scripts.json`. Uploaded as YouTube `localizations` so non-English viewers see localized metadata. Failures fall back to English-only. |
 | 3    | Image Generation  | FLUX generates 5 cinematic 9:16 images (HuggingFace schnell if token set, else Replicate dev, else PIL fallback) |
 | 4    | Voice Generation  | Kokoro neural TTS (auto-fallback: Piper → Coqui → Edge TTS)     |
 | 5a   | Captions          | Whisper word timestamps or estimation-based SRT                 |
 | 5b   | Video Assembly    | ffmpeg: images + audio + captions + "Follow @ThatActuallyHappened11" overlay |
-| 6    | YouTube Upload    | Uploads video to your channel (YouTube auto-selects thumbnail)  |
+| 6    | YouTube Upload    | Uploads video to your channel (Entertainment category, Creative Commons license). Also uploads the SRT as a real caption track via `captions.insert` (selectable in the CC menu, not just burned pixels) and prepends up to 3 normalized hashtags to the title to claim YouTube's title hashtag chip. |
 
 All steps are **resumable** — if a step fails, re-run the same command and it continues from where it stopped.
 
@@ -278,7 +279,7 @@ All steps are **resumable** — if a step fails, re-run the same command and it 
 output/
   <slug>/
     events.json       ← discovered historical events
-    scripts.json      ← generated video scripts (includes hook_type field)
+    scripts.json      ← generated video scripts (includes hook_type, scene_visuals, localizations)
     images/           ← AI-generated images per event + img_N.txt sidecar with the exact prompt sent to the backend (paste into other tools to compare output)
     audio/            ← TTS narration audio
     subtitles/        ← captions (.ass + .srt)
