@@ -257,7 +257,7 @@ To run daily without touching your PC:
 | 4    | Voice Generation  | Kokoro neural TTS (auto-fallback: Piper → Coqui → Edge TTS)     |
 | 5a   | Captions          | Whisper word timestamps or estimation-based SRT                 |
 | 5b   | Video Assembly    | ffmpeg: images + audio + captions + "Follow @ThatActuallyHappened11" overlay |
-| 6    | YouTube Upload    | Uploads video to your channel (Entertainment category, Creative Commons license). Also uploads the SRT as a real caption track via `captions.insert` (selectable in the CC menu, not just burned pixels) and prepends up to 3 normalized hashtags to the title to claim YouTube's title hashtag chip. |
+| 6    | YouTube Upload    | Uploads video to your channel (Entertainment category, Creative Commons license). Also uploads the SRT as a real caption track via `captions.insert` (selectable in the CC menu, not just burned pixels) and appends up to 3 normalized hashtags to the title to claim YouTube's title hashtag chip (without truncating the title). |
 
 All steps are **resumable** — if a step fails, re-run the same command and it continues from where it stopped.
 

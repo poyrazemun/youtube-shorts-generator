@@ -15,8 +15,8 @@ import config
 from pipeline.retry import with_retry
 
 # YouTube renders the first 3 hashtags found in the title as a clickable
-# "category chip" above the title. We prepend up to this many normalized
-# hashtags to claim that surface for discovery.
+# "category chip" above the title. We append up to this many normalized
+# hashtags to claim that surface for discovery without truncating the title.
 _TITLE_HASHTAG_COUNT = 3
 _TITLE_MAX_CHARS = 100
 
@@ -170,10 +170,10 @@ def _normalize_hashtag(tag: str) -> str:
 
 
 def _build_title_with_hashtags(title: str, hashtags: list[str]) -> str:
-    """Prepend up to _TITLE_HASHTAG_COUNT normalized hashtags to the title to
+    """Append up to _TITLE_HASHTAG_COUNT normalized hashtags to the title to
     claim YouTube's title hashtag chip. Drops tags as needed to fit the 100-char
-    ceiling; if even one tag plus the original title overflows, the title is
-    truncated rather than skipping the chip entirely."""
+    ceiling; the original title is preserved and never truncated to make room
+    for hashtags."""
     seen: set[str] = set()
     candidates: list[str] = []
     for raw in hashtags:
@@ -188,21 +188,15 @@ def _build_title_with_hashtags(title: str, hashtags: list[str]) -> str:
         if len(candidates) >= _TITLE_HASHTAG_COUNT:
             break
 
-    # Try the largest hashtag set that fits. Keep the original title intact
-    # if possible; only fall back to truncation when no set fits.
-    for n in range(len(candidates), 0, -1):
-        prefix = " ".join(f"#{t}" for t in candidates[:n]) + " "
-        if len(prefix) + len(title) <= _TITLE_MAX_CHARS:
-            return prefix + title
-
-    if candidates:
-        prefix = f"#{candidates[0]} "
-        budget = _TITLE_MAX_CHARS - len(prefix)
-        if budget >= 4:
-            return prefix + title[: budget - 3] + "..."
-
     if len(title) > _TITLE_MAX_CHARS:
-        title = title[: _TITLE_MAX_CHARS - 3] + "..."
+        return title[: _TITLE_MAX_CHARS - 3] + "..."
+
+    # Try the largest hashtag set that fits after the title.
+    for n in range(len(candidates), 0, -1):
+        suffix = " " + " ".join(f"#{t}" for t in candidates[:n])
+        if len(title) + len(suffix) <= _TITLE_MAX_CHARS:
+            return title + suffix
+
     return title
 
 

@@ -17,7 +17,7 @@ You set it up once. From then on, one command per day publishes one short. Topic
 - **Scene-aware image prompts** — role + preset system, plus per-beat `scene_visuals` so the 5 images describe distinct moments (wide → close-up → portrait → action → aftermath) instead of 5 near-identical takes on one theme.
 - **Multi-language metadata** — title + description auto-translated to Spanish / Portuguese / Hindi / Indonesian via Haiku 4.5 and attached to the upload as YouTube `localizations`.
 - **Real caption tracks** — SRT uploaded via `captions.insert`, so the CC button in the YouTube player exposes a selectable English track (not just burned-in pixels).
-- **Title hashtag chip** — up to 3 normalized CamelCase hashtags are prepended to the title to claim YouTube's clickable title hashtag chip for discovery.
+- **Title hashtag chip** — up to 3 normalized CamelCase hashtags are appended to the title to claim YouTube's clickable title hashtag chip without truncating the original title.
 - **Whisper-timed subtitles** — burned-in 3-word cards synced to the audio, with a CTA overlay in the last 3 seconds.
 - **Analytics feedback loop** — `--analytics` summarises which keywords and hook types perform best; those signals are injected into the next `--refresh-topics` prompt.
 - **Per-run cost + timing tracker** — `output/<slug>/cost.json` + a chronological `cost_ledger.txt` with running totals.
