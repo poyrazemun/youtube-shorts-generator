@@ -15,6 +15,7 @@ You set it up once. From then on, one command per day publishes one short. Topic
 - **Virality-scored topic queue** — Claude rates 25 topic ideas 1–10; only ≥7 ship, sorted best-first.
 - **Content-safety pre-check** — every script is evaluated against YouTube's demotion rules before any image-generation spend; failed scripts halt the pipeline and are marked failed in the queue.
 - **Scene-aware image prompts** — role + preset system, plus per-beat `scene_visuals` so the 5 images describe distinct moments (wide → close-up → portrait → action → aftermath) instead of 5 near-identical takes on one theme.
+- **Manual image A/B mode** — `--manual-images` pauses the pipeline after scene planning so you can drop in images from Midjourney / DALL-E / Sora / etc. and resume; lets you A/B test external generators against the FLUX baseline. See [manual-usage.md](manual-usage.md).
 - **Multi-language metadata** — title + description auto-translated to Spanish / Portuguese / Hindi / Indonesian via Haiku 4.5 and attached to the upload as YouTube `localizations`.
 - **Real caption tracks** — SRT uploaded via `captions.insert`, so the CC button in the YouTube player exposes a selectable English track (not just burned-in pixels).
 - **Title hashtag chip** — up to 3 normalized CamelCase hashtags are appended to the title to claim YouTube's clickable title hashtag chip without truncating the original title.
@@ -191,11 +192,17 @@ py -3.12 orchestrator.py --delete-topic a3f2
 # (skips Claude, forces PIL images, skips YouTube upload; topic/keyword optional)
 py -3.12 orchestrator.py --dry-run
 
+# Manual image mode — pause after scene planning so you can drop in images
+# generated externally (Midjourney / DALL-E / Sora / etc.), then re-run the
+# same command to resume from TTS through upload. See manual-usage.md.
+py -3.12 orchestrator.py --auto --manual-images
+
 # Flags available on all modes
---no-upload    skip YouTube upload, save videos locally
---no-edit      skip prompt editing pause (automation mode)
---verbose      DEBUG-level console logging
---dry-run      skip Claude + force PIL images + skip upload (no API spend)
+--no-upload      skip YouTube upload, save videos locally
+--no-edit        skip prompt editing pause (automation mode)
+--verbose        DEBUG-level console logging
+--dry-run        skip Claude + force PIL images + skip upload (no API spend)
+--manual-images  pause after scene planning; resume once you've dropped img_0..N.png into the printed folder
 ```
 
 ---
