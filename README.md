@@ -4,7 +4,7 @@
 
 > **An autonomous YouTube Shorts channel about strange real history.** Run it on a daily schedule and the channel runs itself — topics, scripts, images, voiceover, subtitles, upload.
 
-📺 **See it in action:** [@ThatActuallyHappened11 on YouTube](https://www.youtube.com/@ThatActuallyHappened11) — the live channel this repo runs. **Click the thumbnail to watch a sample Short produced end-to-end by this pipeline.**
+📺 **See it in action:** [@ThatActuallyHappened11 on YouTube](https://www.youtube.com/@ThatActuallyHappened11) — the live channel this repo runs.
 
 You set it up once. From then on, one command per day publishes one short. Topics are picked from a Claude-generated queue scored for virality, scripts use proven hook formulas, images come from FLUX, the voice is Kokoro TTS, and YouTube performance data feeds back into the next batch of topics so the channel learns what works.
 
@@ -202,7 +202,7 @@ py -3.12 orchestrator.py --auto --manual-images
 --no-edit        skip prompt editing pause (automation mode)
 --verbose        DEBUG-level console logging
 --dry-run        skip Claude + force PIL images + skip upload (no API spend)
---manual-images  pause after scene planning; resume once you've dropped img_0..N.png into the printed folder
+--manual-images  pause after scene planning; resume once you have dropped img_0..N.png into the printed folder
 ```
 
 ---
