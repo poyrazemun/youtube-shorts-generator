@@ -18,7 +18,6 @@ You set it up once. From then on, one command per day publishes one short. Topic
 - **Manual image A/B mode** — `--manual-images` pauses the pipeline after scene planning so you can drop in images from Midjourney / DALL-E / Sora / etc. and resume; lets you A/B test external generators against the FLUX baseline. See [manual-usage.md](manual-usage.md).
 - **Multi-language metadata** — title + description auto-translated to Spanish / Portuguese / Hindi / Indonesian via Haiku 4.5 and attached to the upload as YouTube `localizations`.
 - **Real caption tracks** — SRT uploaded via `captions.insert`, so the CC button in the YouTube player exposes a selectable English track (not just burned-in pixels).
-- **Title hashtag chip** — up to 3 normalized CamelCase hashtags are appended to the title to claim YouTube's clickable title hashtag chip without truncating the original title.
 - **Whisper-timed subtitles** — burned-in 3-word cards synced to the audio, with a CTA overlay in the last 3 seconds.
 - **Analytics feedback loop** — `--analytics` summarises which keywords and hook types perform best; those signals are injected into the next `--refresh-topics` prompt.
 - **Per-run cost + timing tracker** — `output/<slug>/cost.json` + a chronological `cost_ledger.txt` with running totals.
@@ -98,7 +97,7 @@ Switching to HuggingFace saves about 80% per video. The Replicate path is the sa
   Step 4   tts_generator.py      Kokoro neural TTS → narration audio (fallback: Piper → Coqui → Edge TTS)
   Step 5a  captions.py           Whisper / estimation → word-timed subtitles
   Step 5b  video_assembler.py    ffmpeg → 1080×1920 MP4 with burned captions + CTA overlay + background music
-  Step 6   youtube_uploader.py   YouTube Data API v3 → upload video + SRT caption track + localized metadata + title hashtag chip
+  Step 6   youtube_uploader.py   YouTube Data API v3 → upload video + SRT caption track + localized metadata
        ↓
 --analytics             Fetches view counts, feeds performance data back into topic generation
 ```

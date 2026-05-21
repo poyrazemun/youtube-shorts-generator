@@ -104,7 +104,7 @@ SUBTITLE_OUTLINE_COLOR = "black"
 SUBTITLE_OUTLINE_WIDTH = 3
 
 # ── YouTube ───────────────────────────────────────────────────────────────────
-YOUTUBE_CATEGORY_ID = "24"  # Entertainment
+YOUTUBE_CATEGORY_ID = "27"  # Education
 YOUTUBE_PRIVACY = os.getenv("YOUTUBE_PRIVACY", "private")  # start private for safety
 YOUTUBE_SCOPES = [
     "https://www.googleapis.com/auth/youtube.upload",

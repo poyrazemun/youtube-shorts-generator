@@ -14,10 +14,6 @@ from pathlib import Path
 import config
 from pipeline.retry import with_retry
 
-# YouTube renders the first 3 hashtags found in the title as a clickable
-# "category chip" above the title. We append up to this many normalized
-# hashtags to claim that surface for discovery without truncating the title.
-_TITLE_HASHTAG_COUNT = 3
 _TITLE_MAX_CHARS = 100
 
 logger = logging.getLogger(__name__)
@@ -169,37 +165,6 @@ def _normalize_hashtag(tag: str) -> str:
     return "".join(_shape(p) for p in parts)
 
 
-def _build_title_with_hashtags(title: str, hashtags: list[str]) -> str:
-    """Append up to _TITLE_HASHTAG_COUNT normalized hashtags to the title to
-    claim YouTube's title hashtag chip. Drops tags as needed to fit the 100-char
-    ceiling; the original title is preserved and never truncated to make room
-    for hashtags."""
-    seen: set[str] = set()
-    candidates: list[str] = []
-    for raw in hashtags:
-        if not raw:
-            continue
-        norm = _normalize_hashtag(str(raw))
-        key = norm.lower()
-        if not norm or key in seen:
-            continue
-        seen.add(key)
-        candidates.append(norm)
-        if len(candidates) >= _TITLE_HASHTAG_COUNT:
-            break
-
-    if len(title) > _TITLE_MAX_CHARS:
-        return title[: _TITLE_MAX_CHARS - 3] + "..."
-
-    # Try the largest hashtag set that fits after the title.
-    for n in range(len(candidates), 0, -1):
-        suffix = " " + " ".join(f"#{t}" for t in candidates[:n])
-        if len(title) + len(suffix) <= _TITLE_MAX_CHARS:
-            return title + suffix
-
-    return title
-
-
 @with_retry(max_retries=3, base_delay=2)
 def _upload_video(service, video_path: Path, script: dict) -> dict:
     """
@@ -224,7 +189,8 @@ def _upload_video(service, video_path: Path, script: dict) -> dict:
     hashtag_str = " ".join(f"#{t}" for t in description_hashtags)
     full_description = f"{description}\n\n{hashtag_str}"
 
-    title = _build_title_with_hashtags(title, hashtags)
+    if len(title) > _TITLE_MAX_CHARS:
+        title = title[: _TITLE_MAX_CHARS - 3] + "..."
 
     event = script.get("source_event", {})
     # Use dedicated youtube_tags if present (T1-D), otherwise fall back to hashtags
@@ -245,7 +211,6 @@ def _upload_video(service, video_path: Path, script: dict) -> dict:
         "status": {
             "privacyStatus": config.YOUTUBE_PRIVACY,
             "selfDeclaredMadeForKids": False,
-            "license": "creativeCommon",
         },
     }
 
