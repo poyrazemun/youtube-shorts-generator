@@ -60,7 +60,7 @@ HOOK RULES:
 - The rehook should sound natural, not clickbait, and should land around the midpoint of the story
 
 YouTube SEO requirements:
-- title: Under 60 characters. Front-load the most searchable keyword first (e.g. "Tesla's Stolen Invention That Changed the World | 1900"). Factual, no ALL CAPS. No misleading claims.
+- title: Under 50 characters (hard limit — Shorts player truncates wider titles around this point). Front-load the most searchable keyword first (e.g. "Tesla's Stolen Invention | 1900"). Factual, no ALL CAPS. No misleading claims.
 - description: 150-300 words. MUST start with educational framing: "This educational short explores..." or "Explore the true historical story of...". Then: 2-3 sentence summary → 2-3 sentences of deeper context/why it matters → 1-2 sentences on broader historical significance → call to action ("Follow for more unbelievable history."). Weave in relevant keywords naturally throughout.
 - hashtags: 5 general tags (history, shorts, facts, etc.). No # prefix.
 - youtube_tags: 20 tags mixing broad ("history", "shorts", "documentary", "facts") and specific (inventor name, invention type, location, year, key themes, related figures). No # prefix. Aim to fill close to 500 characters total.
@@ -89,7 +89,7 @@ Each scene_visuals entry must:
 
 Return ONLY this JSON (no markdown, no extra text):
 {{
-  "title": "Keyword-first title under 60 chars with year",
+  "title": "Keyword-first title under 50 chars with year",
   "description": "150-300 word SEO description ending with call to action",
   "hashtags": ["history", "unbelievable", "shorts", "facts", "historical"],
   "youtube_tags": ["history", "shorts", "historical facts", "documentary", "unreal history"],
@@ -322,10 +322,10 @@ def _validate_and_fix_script(script: dict) -> dict:
     script["word_count"] = word_count
     script["estimated_seconds"] = estimated_seconds
 
-    # Clamp title to 60 chars (prompt asks for <60; this is the hard ceiling
-    # that keeps it under YouTube's search-result truncation as well).
-    if len(script.get("title", "")) > 60:
-        script["title"] = script["title"][:57] + "..."
+    # Clamp title to 50 chars. The Shorts player truncates by pixel width and
+    # cuts off around this point for titles with wider characters.
+    if len(script.get("title", "")) > 50:
+        script["title"] = script["title"][:47] + "..."
 
     # Ensure hashtags + youtube_tags are lists of strings without # prefix
     for field in ("hashtags", "youtube_tags"):
