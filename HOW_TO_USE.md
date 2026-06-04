@@ -95,8 +95,22 @@ Picks the highest-scoring pending topic, runs all 6 pipeline steps, uploads to Y
 
 After each successful run the pipeline prints a one-line cost summary, e.g.:
 ```
-  Pipeline finished in 200s, ~$0.1552 spend (Claude $0.0302, images 5×replicate $0.1250)
+  Pipeline finished in 127s, ~$0.1736 spend (Claude $0.0486, images 5×replicate $0.1250)
 ```
+That Claude figure covers every Claude call: Sonnet (event + script + safety, ~$0.034) plus the two
+Haiku passes — the historical fact-check (~$0.0025) and localizations (~$0.012). Those Claude steps
+run on every video and total ~$0.05.
+
+On top of that you pick **one** image backend and **one** voice — they're either/or alternatives, not
+all required:
+- **Image backend:** HuggingFace FLUX.1-schnell is **free**; Replicate FLUX.1-dev is ~$0.125 (5 images).
+- **Voice:** Kokoro (and Piper / Coqui / Edge) are **free** and local; ElevenLabs is an optional flat
+  $5/mo subscription, **not** a per-render charge.
+
+So a full run is **~$0.05/video** on the free HuggingFace + Kokoro combo, or **~$0.17/video** if you use
+Replicate for images. The voice choice doesn't change the per-video number. The bare minimum to run the
+pipeline is just an Anthropic API key (plus a YouTube OAuth credential for uploading).
+
 The full per-step breakdown (timings, token counts, image counts per provider) is saved to `output/<slug>/cost.json`, and one row is appended to `output/cost_ledger.txt` so you can scroll back through every video you have ever run with running totals at the bottom. Both files are gitignored.
 
 Alternatively, pick a specific topic by its ID from `--list-topics`:
@@ -292,7 +306,7 @@ To run daily without touching your PC:
 | Step | Name              | What it does                                                    |
 |------|-------------------|-----------------------------------------------------------------|
 | 1    | Event Discovery   | Claude finds 1 strange real historical event                    |
-| 2    | Script Generation | Claude writes a viral 20–30s script using one of 5 hook formulas plus a rehook and loop-aware ending. Also outputs a `scene_visuals` block — one distinct camera-subject description per beat — so the 5 images aren't visual duplicates of each other. |
+| 2    | Script Generation | Claude writes a viral 20–30s script using one of 5 hook formulas plus a rehook and loop-aware ending. Also outputs a `scene_visuals` block — one distinct camera-subject description per beat — so the 5 images aren't visual duplicates of each other. A strict historical-accuracy directive in the system prompt + a swift Haiku fact-check pass (`FACTCHECK_ENABLED`) correct pop-history myths / fabricated drama in the 5 beats before saving. |
 | 2b   | Localization      | Haiku 4.5 translates title + description into es / pt / hi / id and caches them in `scripts.json`. Uploaded as YouTube `localizations` so non-English viewers see localized metadata. Failures fall back to English-only. |
 | 3    | Image Generation  | FLUX generates 5 cinematic 9:16 images (HuggingFace schnell if token set, else Replicate dev, else PIL fallback) |
 | 4    | Voice Generation  | ElevenLabs (if enabled) → Kokoro neural TTS (auto-fallback: Piper → Coqui → Edge TTS) |
@@ -320,7 +334,7 @@ All steps are **resumable** — if a step fails, re-run the same command and it 
 output/
   <slug>/
     events.json       ← discovered historical events
-    scripts.json      ← generated video scripts (includes hook_type, scene_visuals, localizations)
+    scripts.json      ← generated video scripts (includes hook_type, scene_visuals, localizations, and a fact_check audit field per script)
     images/           ← AI-generated images per event + img_N.txt sidecar with the exact prompt sent to the backend (paste into other tools to compare output)
     audio/            ← TTS narration audio
     subtitles/        ← captions (.ass + .srt)

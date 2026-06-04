@@ -65,25 +65,38 @@ Full setup (ffmpeg, espeak-ng, YouTube OAuth) is in [Setup](#setup) below.
 
 The pipeline is a six-step CLI: pick a topic from the scored queue, write the script, generate images, synthesise voice, burn captions, upload. Every step caches its output, so re-running picks up where it stopped.
 
-**Cost per video — measured from a real run** (`output/<slug>/cost.json`):
+**Cost per video — measured from a real run** (`output/<slug>/cost.json`).
 
-| Component | Cost |
+These Claude steps run on **every** video:
+
+| Always-on (per video) | Cost |
 |---|---|
-| Claude (event + script + content safety, Sonnet 4.6) | ~$0.03 |
-| Claude localizations (title + description × 4 languages, Haiku 4.5) | ~$0.005 |
-| Image generation — HuggingFace FLUX.1-schnell (`HUGGINGFACE_API_TOKEN` set) | **Free** |
-| Image generation — Replicate FLUX.1-dev (5 × $0.025) | $0.125 |
-| Voice — Kokoro TTS (default) + captions, ffmpeg assembly, YouTube upload | Free |
-| Voice — ElevenLabs (optional, if `ELEVENLABS_ENABLED=true`) | flat $5/mo subscription† |
-| **Total: HuggingFace path** | **~$0.03** |
-| **Total: Replicate path** | **~$0.16** |
+| Claude — event + script + content safety (Sonnet 4.6) | ~$0.034 |
+| Claude — historical fact-check pass (Haiku 4.5, ~750 in / ~350 out) | ~$0.0025 |
+| Claude — localizations, title + description × 4 languages (Haiku 4.5) | ~$0.012 |
+| Captions, ffmpeg assembly, YouTube upload | Free |
+| **Subtotal** | **~$0.05** |
+
+Then you pick **one** image backend and **one** voice — these are *either/or* alternatives, **not** all required:
+
+| Pick one — image backend | Cost |
+|---|---|
+| HuggingFace FLUX.1-schnell (`HUGGINGFACE_API_TOKEN` set) | **Free** |
+| Replicate FLUX.1-dev (5 × $0.025) | $0.125 |
+
+| Pick one — voice | Cost |
+|---|---|
+| Kokoro TTS (default, local) — also Piper / Coqui / Edge | **Free** |
+| ElevenLabs (optional, `ELEVENLABS_ENABLED=true`) | flat $5/mo subscription† |
+
+**So a full run costs:** ~**$0.05/video** with the free HuggingFace + Kokoro combo, or ~**$0.17/video** if you use Replicate for images. The voice choice doesn't change the per-video number (Kokoro is free; ElevenLabs is a flat monthly fee, below).
 
 † ElevenLabs Starter is a **flat $5/mo** plan (30,000 credits ≈ 54 videos on `eleven_multilingual_v2`,
 ~108 on a Flash model), **not** a per-render charge — so it doesn't appear in `cost.json`, which tracks
 only marginal API spend. Effective per-video cost is $5 ÷ videos-that-month (≈ $0.09–0.17 at a daily
 cadence). A monetized channel needs at least Starter for commercial rights anyway. See `elevenlabs.md`.
 
-Switching to HuggingFace saves about 80% per video. The Replicate path is the safer fallback (no rate limits, consistent quality on FLUX.1-dev) but you pay per image.
+HuggingFace images are free; the Replicate path is the safer fallback (no rate limits, consistent quality on FLUX.1-dev) but you pay per image.
 
 <details>
 <summary><b>Detailed pipeline diagram</b></summary>
@@ -97,6 +110,7 @@ Switching to HuggingFace saves about 80% per video. The Replicate path is the sa
        ↓
   Step 1   event_discovery.py    Claude → 1 strange historical event
   Step 2   script_generator.py   Claude + DuckDuckGo research → viral script with hook formula + rehook + loopable ending + per-beat scene_visuals + SEO metadata
+                                  (accuracy guardrail: strict directive in the system prompt + a swift Haiku fact-check pass that corrects pop-history myths before saving)
   Step 2b  localizer.py          Haiku 4.5 → es/pt/hi/id title + description, cached in scripts.json
   Step 2.5 content_safety.py     Claude evaluates the script vs. YouTube demotion rules; halts before image spend on a fail
   Step 3   image_generator.py    FLUX (HuggingFace schnell, or Replicate dev) → 5 cinematic 9:16 images
@@ -254,8 +268,13 @@ Every successful run records per-step wall-clock + Claude token usage + image-ge
 Both files are gitignored. After each successful run a one-line summary prints to the console:
 
 ```
-Pipeline finished in 200s, ~$0.1552 spend (Claude $0.0302, images 5×replicate $0.1250)
+Pipeline finished in 127s, ~$0.1736 spend (Claude $0.0486, images 5×replicate $0.1250)
 ```
+
+The Claude figure aggregates every Claude call in the run — Sonnet (event, script, safety) **plus**
+the Haiku fact-check and localization passes. Dated model IDs (e.g. `claude-haiku-4-5-20251001`) are
+normalized to their `CLAUDE_PRICING` base key, so Haiku spend is costed correctly rather than logged
+as $0.
 
 **Updating pricing when rates change**
 

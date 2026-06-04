@@ -47,6 +47,16 @@ CLAUDE_MAX_TOKENS = 4096
 # title/description translation) that doesn't need Sonnet — Haiku is ~5× cheaper.
 CLAUDE_TRANSLATION_MODEL = "claude-haiku-4-5-20251001"
 
+# Lightweight model for the post-generation historical fact-check pass. Scanning
+# five short script beats for myths/logic errors is a focused task — Haiku keeps
+# the follow-up call swift and cheap relative to the Sonnet generation call.
+CLAUDE_FACTCHECK_MODEL = "claude-haiku-4-5-20251001"
+# Gate for the fact-check correction step. On by default; set FACTCHECK_ENABLED=0
+# in .env to skip it (e.g. to save the extra call while debugging).
+FACTCHECK_ENABLED = os.getenv("FACTCHECK_ENABLED", "true").lower() in (
+    "1", "true", "yes", "on"
+)
+
 # YouTube `localizations` target languages. BCP-47 codes. Picked for Shorts
 # reach: high-population markets where English titles otherwise hide the video.
 LOCALIZATION_LANGUAGES = ["es", "pt", "hi", "id"]
