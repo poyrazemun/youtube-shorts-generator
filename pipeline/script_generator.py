@@ -14,6 +14,7 @@ from anthropic.types import TextBlock
 
 import config
 from pipeline import cost_tracker
+from pipeline.fact_checker import fact_check_script
 from pipeline.localizer import generate_localizations
 from pipeline.research import research_topic
 from pipeline.retry import with_retry
@@ -26,12 +27,28 @@ def _call_claude(client: anthropic.Anthropic, **kwargs) -> anthropic.types.Messa
     return client.messages.create(**kwargs)
 
 
-SYSTEM_PROMPT = """You are a viral YouTube Shorts scriptwriter specializing in
+# Strict accuracy guardrail injected into the system prompt. Keeps the punchy
+# scriptwriter persona but forbids the "pop-history myth" failure mode where the
+# model invents dramatic reactions/consequences for cheap effect. The closing
+# paragraph reiterates the JSON contract so accuracy rules never override format.
+HISTORICAL_ACCURACY_DIRECTIVE = """
+# CRITICAL DIRECTIVE: ABSOLUTE HISTORICAL ACCURACY
+You must maintain 100% historical accuracy. You are strictly forbidden from fabricating, exaggerating, or inventing historical details, human reactions, or consequences to create cheap dramatic effects. Every "Hook", "Twist", and "Ending Fact" must be grounded in verified history.
+- NO PSEUDO-SCIENCE / FALSE AMAZEMENT: Do not claim historical groups were "baffled by basic physics or nature" (e.g., claiming Conquistadors thought the physics of popcorn was "magic/witchcraft").
+- ACCURATE CONTEXTUALIZATION: If Europeans branded an Indigenous ritual as "sorcery," clarify that they targeted the pagan religious worship/deities, NOT the physical food preparation or ingredient itself.
+- NO INTERNET MYTHS: If a dramatic twist sounds like an unverified internet myth, reject it. Derive dramatic tension from REAL historical ironies, cultural clashes, political paranoia, or strategic conflicts instead of fake drama.
+
+These accuracy rules constrain the CONTENT of each field only. They must NOT change the required JSON output structure — every field ("title", "description", "hashtags", "youtube_tags", "hook_type", "hook", "context", "rehook", "twist", "ending_fact", "full_script", "scene_visuals", "word_count", "estimated_seconds") must still be present and valid."""
+
+SYSTEM_PROMPT = (
+    """You are a viral YouTube Shorts scriptwriter specializing in
 historical content. You write punchy, engaging scripts that hook viewers in the
 first second, rehook them in the middle, and leave them astonished. Scripts must
 be exactly 5 parts:
-Hook → Context → Rehook → Twist → Ending fact.
-Always respond with valid JSON only — no markdown fences, no extra text."""
+Hook → Context → Rehook → Twist → Ending fact."""
+    + HISTORICAL_ACCURACY_DIRECTIVE
+    + "\n\nAlways respond with valid JSON only — no markdown fences, no extra text."
+)
 
 USER_PROMPT_TEMPLATE = """Write a viral YouTube Shorts script for this historical event:
 
@@ -216,9 +233,18 @@ def generate_scripts(
             script = _parse_json_response(raw_text)
             script = _validate_and_fix_script(script)
 
-            # Attach source event metadata
+            # Attach source event metadata (fact-checker reads source_event for
+            # ground-truth, so set it before the fact-check pass).
             script["event_index"] = idx
             script["source_event"] = event
+
+            # Step 2 of the accuracy guardrail: a swift Haiku fact-check pass
+            # corrects pop-history myths / fabricated drama in the five beats
+            # before the script is persisted. Fail-open — never blocks a run.
+            script = fact_check_script(script, client)
+            # Re-validate so full_script + word_count reflect any corrections
+            # (fact_check_script clears full_script when a beat changed).
+            script = _validate_and_fix_script(script)
 
             # Generate localizations now so they're cached in scripts.json
             # alongside the rest of the script. Failures degrade gracefully:

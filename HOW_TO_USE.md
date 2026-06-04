@@ -19,6 +19,11 @@ ANTHROPIC_API_KEY=sk-ant-...
 REPLICATE_API_TOKEN=r8_...          # ~$0.025/image with FLUX.1-dev (5 images = $0.125 per video)
 YOUTUBE_PRIVACY=private             # start private, change to public when ready
 LOG_LEVEL=INFO
+
+# Optional — premium hosted voice (else free Kokoro is used). See "Using ElevenLabs" below.
+ELEVENLABS_ENABLED=true             # flat $5/mo Starter plan; omit/false to stay on Kokoro
+ELEVENLABS_API_KEY=sk_...           # from elevenlabs.io → Settings → API Keys
+ELEVENLABS_VOICE_ID=...             # copied from the ElevenLabs voice library
 ```
 
 ### 3. Set up YouTube API (one-time)
@@ -36,6 +41,22 @@ Then add `C:\Program Files\eSpeak NG` to your system PATH.
 Verify with: `espeak-ng --version`
 
 > Windows Defender may flag the installer — this is a false positive. Click **More info → Run anyway**.
+
+> Only needed for the **Kokoro** voice path. If you run with ElevenLabs enabled (see below), espeak-ng
+> isn't used — but it's still worth installing so Kokoro works as the offline fallback.
+
+### 6. (Optional) Enable ElevenLabs — premium hosted voice
+Kokoro is the free, zero-config default. For the most human-sounding narration, use ElevenLabs:
+
+1. Subscribe to the **Starter plan ($5/mo)** at https://elevenlabs.io (required for commercial rights).
+2. Settings → **API Keys** → create a key (`sk_...`, shown once — copy it).
+3. **Voices → Voice Library**: filter by *Narrative & Story* / accent / gender, preview voices,
+   audition your candidates on a real script, then **Copy Voice ID** of the one you pick.
+4. Put all three in `.env`: `ELEVENLABS_ENABLED=true`, `ELEVENLABS_API_KEY`, `ELEVENLABS_VOICE_ID`.
+
+It's **env-gated**: with `ELEVENLABS_ENABLED=true` and a key set, Step 4 uses ElevenLabs; otherwise it
+falls back to Kokoro. Model defaults to `eleven_multilingual_v2` (best quality); override with
+`ELEVENLABS_MODEL=eleven_flash_v2_5` to halve credit usage at near-equal English quality.
 
 ---
 
@@ -74,8 +95,22 @@ Picks the highest-scoring pending topic, runs all 6 pipeline steps, uploads to Y
 
 After each successful run the pipeline prints a one-line cost summary, e.g.:
 ```
-  Pipeline finished in 200s, ~$0.1552 spend (Claude $0.0302, images 5×replicate $0.1250)
+  Pipeline finished in 127s, ~$0.1736 spend (Claude $0.0486, images 5×replicate $0.1250)
 ```
+That Claude figure covers every Claude call: Sonnet (event + script + safety, ~$0.034) plus the two
+Haiku passes — the historical fact-check (~$0.0025) and localizations (~$0.012). Those Claude steps
+run on every video and total ~$0.05.
+
+On top of that you pick **one** image backend and **one** voice — they're either/or alternatives, not
+all required:
+- **Image backend:** HuggingFace FLUX.1-schnell is **free**; Replicate FLUX.1-dev is ~$0.125 (5 images).
+- **Voice:** Kokoro (and Piper / Coqui / Edge) are **free** and local; ElevenLabs is an optional flat
+  $5/mo subscription, **not** a per-render charge.
+
+So a full run is **~$0.05/video** on the free HuggingFace + Kokoro combo, or **~$0.17/video** if you use
+Replicate for images. The voice choice doesn't change the per-video number. The bare minimum to run the
+pipeline is just an Anthropic API key (plus a YouTube OAuth credential for uploading).
+
 The full per-step breakdown (timings, token counts, image counts per provider) is saved to `output/<slug>/cost.json`, and one row is appended to `output/cost_ledger.txt` so you can scroll back through every video you have ever run with running totals at the bottom. Both files are gitignored.
 
 Alternatively, pick a specific topic by its ID from `--list-topics`:
@@ -182,7 +217,27 @@ Drop PNG/JPG files directly into `test_output/`, then run. It uses your images +
 
 ## Changing the Voice
 
-Voice settings are controlled via your `.env` file:
+Voice settings are controlled via your `.env` file. There are two backends.
+
+### Option A — ElevenLabs (premium, hosted)
+
+The most human-sounding option. Top of the priority chain when enabled:
+
+```env
+ELEVENLABS_ENABLED=true
+ELEVENLABS_API_KEY=sk_...                    # from elevenlabs.io → Settings → API Keys
+ELEVENLABS_VOICE_ID=...                       # Voice Library → pick a voice → Copy Voice ID
+ELEVENLABS_MODEL=eleven_multilingual_v2       # quality; or eleven_flash_v2_5 for ½ the credits
+```
+
+To change the voice, browse **Voices → Voice Library** at elevenlabs.io (filter by *Narrative &
+Story*, accent, gender), audition candidates on a real script, then copy the new Voice ID into
+`ELEVENLABS_VOICE_ID`. No code changes needed. Set `ELEVENLABS_ENABLED=false` (or remove the key) to
+fall back to Kokoro.
+
+### Option B — Kokoro (free, offline default)
+
+Used automatically when ElevenLabs isn't enabled:
 
 ```env
 KOKORO_VOICE=bm_george       # voice name (see table below)
@@ -251,10 +306,10 @@ To run daily without touching your PC:
 | Step | Name              | What it does                                                    |
 |------|-------------------|-----------------------------------------------------------------|
 | 1    | Event Discovery   | Claude finds 1 strange real historical event                    |
-| 2    | Script Generation | Claude writes a viral 20–30s script using one of 5 hook formulas plus a rehook and loop-aware ending. Also outputs a `scene_visuals` block — one distinct camera-subject description per beat — so the 5 images aren't visual duplicates of each other. |
+| 2    | Script Generation | Claude writes a viral 20–30s script using one of 5 hook formulas plus a rehook and loop-aware ending. Also outputs a `scene_visuals` block — one distinct camera-subject description per beat — so the 5 images aren't visual duplicates of each other. A strict historical-accuracy directive in the system prompt + a swift Haiku fact-check pass (`FACTCHECK_ENABLED`) correct pop-history myths / fabricated drama in the 5 beats before saving. |
 | 2b   | Localization      | Haiku 4.5 translates title + description into es / pt / hi / id and caches them in `scripts.json`. Uploaded as YouTube `localizations` so non-English viewers see localized metadata. Failures fall back to English-only. |
 | 3    | Image Generation  | FLUX generates 5 cinematic 9:16 images (HuggingFace schnell if token set, else Replicate dev, else PIL fallback) |
-| 4    | Voice Generation  | Kokoro neural TTS (auto-fallback: Piper → Coqui → Edge TTS)     |
+| 4    | Voice Generation  | ElevenLabs (if enabled) → Kokoro neural TTS (auto-fallback: Piper → Coqui → Edge TTS) |
 | 5a   | Captions          | Whisper word timestamps or estimation-based SRT                 |
 | 5b   | Video Assembly    | ffmpeg: images + audio + captions + "Follow @ThatActuallyHappened11" overlay |
 | 6    | YouTube Upload    | Uploads video to your channel (Education category, standard YouTube license). Also uploads the SRT as a real caption track via `captions.insert` (selectable in the CC menu, not just burned pixels). |
@@ -279,7 +334,7 @@ All steps are **resumable** — if a step fails, re-run the same command and it 
 output/
   <slug>/
     events.json       ← discovered historical events
-    scripts.json      ← generated video scripts (includes hook_type, scene_visuals, localizations)
+    scripts.json      ← generated video scripts (includes hook_type, scene_visuals, localizations, and a fact_check audit field per script)
     images/           ← AI-generated images per event + img_N.txt sidecar with the exact prompt sent to the backend (paste into other tools to compare output)
     audio/            ← TTS narration audio
     subtitles/        ← captions (.ass + .srt)
@@ -326,6 +381,8 @@ The `prompts/` folder is gitignored — prompt files are local only.
 | `ffmpeg not found` | Install ffmpeg and add it to your system PATH |
 | `ModuleNotFoundError: kokoro` | Run `py -3.12 -m pip install kokoro>=0.9.4 soundfile` |
 | Kokoro falls back to Edge TTS | Make sure you're running with `py -3.12` — Kokoro requires Python 3.10–3.12 |
+| ElevenLabs ignored (uses Kokoro) | Set both `ELEVENLABS_ENABLED=true` **and** `ELEVENLABS_API_KEY` in `.env` — either missing falls back to Kokoro |
+| ElevenLabs API 401 / 429 | 401 = bad/rotated key; 429 = out of monthly credits (check Settings → Usage) or rate-limited — the call retries 3× then errors |
 | `espeak-ng not found` | Install from https://github.com/espeak-ng/espeak-ng/releases and add to PATH |
 | Topic queue exhausted | Run `py -3.12 orchestrator.py --refresh-topics` |
 | Duplicate video generated | Already fixed — `--refresh-topics` now excludes keywords from `video_registry.json` |

@@ -13,6 +13,7 @@ orchestrator (tests, ad-hoc invocations) without any tracker plumbing.
 
 import json
 import logging
+import re
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -30,6 +31,13 @@ logger = logging.getLogger(__name__)
 def claude_cost_usd(model: str, input_tokens: int, output_tokens: int) -> float:
     """Compute USD cost for a single Claude call given token counts."""
     rates = config.CLAUDE_PRICING.get(model)
+    if not rates:
+        # Model IDs may carry a date suffix (e.g. "claude-haiku-4-5-20251001")
+        # while CLAUDE_PRICING is keyed by the base name ("claude-haiku-4-5").
+        # Strip a trailing -YYYYMMDD and retry before giving up — otherwise
+        # real Haiku spend (translation + fact-check) silently records as $0.
+        base = re.sub(r"-\d{8}$", "", model)
+        rates = config.CLAUDE_PRICING.get(base)
     if not rates:
         # Unknown model — log once, treat as $0 rather than crash a real run.
         logger.warning(

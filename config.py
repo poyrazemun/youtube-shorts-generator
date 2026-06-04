@@ -47,6 +47,16 @@ CLAUDE_MAX_TOKENS = 4096
 # title/description translation) that doesn't need Sonnet — Haiku is ~5× cheaper.
 CLAUDE_TRANSLATION_MODEL = "claude-haiku-4-5-20251001"
 
+# Lightweight model for the post-generation historical fact-check pass. Scanning
+# five short script beats for myths/logic errors is a focused task — Haiku keeps
+# the follow-up call swift and cheap relative to the Sonnet generation call.
+CLAUDE_FACTCHECK_MODEL = "claude-haiku-4-5-20251001"
+# Gate for the fact-check correction step. On by default; set FACTCHECK_ENABLED=0
+# in .env to skip it (e.g. to save the extra call while debugging).
+FACTCHECK_ENABLED = os.getenv("FACTCHECK_ENABLED", "true").lower() in (
+    "1", "true", "yes", "on"
+)
+
 # YouTube `localizations` target languages. BCP-47 codes. Picked for Shorts
 # reach: high-population markets where English titles otherwise hide the video.
 LOCALIZATION_LANGUAGES = ["es", "pt", "hi", "id"]
@@ -76,6 +86,20 @@ IMAGE_NEGATIVE_PROMPT = (
 REPLICATE_IMAGE_MODEL = "black-forest-labs/flux-dev"
 
 # ── TTS Settings ──────────────────────────────────────────────────────────────
+# ElevenLabs (hosted, highest-quality voice — top of the backend priority chain).
+# Env-gated: only used when ELEVENLABS_ENABLED is truthy AND a key is present.
+# Falls back to Kokoro otherwise. See elevenlabs.md for the decision record.
+ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY", "")
+ELEVENLABS_ENABLED = os.getenv("ELEVENLABS_ENABLED", "false").lower() in (
+    "1", "true", "yes", "on"
+)
+# Default voice: "George" — warm, mature British narrator (documentary tone),
+# the ElevenLabs preset that matches Kokoro's bm_george.
+ELEVENLABS_VOICE_ID = os.getenv("ELEVENLABS_VOICE_ID", "JBFqnCBsd6RMkjVDRZzb")
+# eleven_multilingual_v2 = best quality (~1 credit/char).
+# eleven_turbo_v2_5 / eleven_flash_v2_5 = ~½ the credits, near-equal on English.
+ELEVENLABS_MODEL = os.getenv("ELEVENLABS_MODEL", "eleven_multilingual_v2")
+
 PIPER_MODEL = os.getenv("PIPER_MODEL", "en_US-lessac-medium")
 PIPER_BINARY = os.getenv("PIPER_BINARY", "piper")  # must be on PATH
 
