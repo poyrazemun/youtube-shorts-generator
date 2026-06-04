@@ -1,6 +1,6 @@
 """
-STEP 4 — VOICE GENERATION (FREE/LOCAL)
-Priority: Kokoro → Piper TTS → Coqui TTS → Edge TTS (Microsoft Neural, default)
+STEP 4 — VOICE GENERATION
+Priority: ElevenLabs (hosted, env-gated) → Kokoro → Piper TTS → Coqui TTS → Edge TTS
 Generates WAV audio from script text.
 Saves to output/<slug>/audio/<event_idx>.wav
 """
@@ -12,6 +12,8 @@ import subprocess
 import warnings
 import wave
 from pathlib import Path
+
+import requests
 
 import config
 from pipeline.retry import with_retry
@@ -25,6 +27,11 @@ logger = logging.getLogger(__name__)
 
 
 # ── Backend Detection ─────────────────────────────────────────────────────────
+
+def _check_elevenlabs() -> bool:
+    """Check if ElevenLabs is enabled and an API key is present."""
+    return bool(config.ELEVENLABS_ENABLED and config.ELEVENLABS_API_KEY)
+
 
 def _check_kokoro() -> bool:
     """Check if Kokoro TTS is installed (requires Python 3.10-3.12)."""
@@ -51,6 +58,11 @@ def _check_coqui() -> bool:
 
 def detect_tts_backend() -> str:
     """Auto-detect which TTS engine is available."""
+    if _check_elevenlabs():
+        logger.info(
+            f"[tts_generator] TTS Backend: ElevenLabs (hosted, {config.ELEVENLABS_MODEL})"
+        )
+        return "elevenlabs"
     if _check_kokoro():
         logger.info("[tts_generator] TTS Backend: Kokoro (open-weight neural TTS)")
         return "kokoro"
@@ -62,6 +74,51 @@ def detect_tts_backend() -> str:
         return "coqui"
     logger.info("[tts_generator] TTS Backend: Edge TTS (en-US-ChristopherNeural)")
     return "edge_tts"
+
+
+# ── ElevenLabs TTS (hosted, highest quality) ──────────────────────────────────
+
+@with_retry(max_retries=3, base_delay=2)
+def _generate_elevenlabs(text: str, out_path: Path) -> Path:
+    """
+    Generate audio using the ElevenLabs hosted TTS API.
+    POSTs to the text-to-speech endpoint, saves the returned MP3, then reuses
+    _convert_mp3_to_wav() to produce a 44.1kHz mono WAV for pipeline consistency.
+    Requires ELEVENLABS_API_KEY and ELEVENLABS_ENABLED=true.
+    """
+    url = (
+        f"https://api.elevenlabs.io/v1/text-to-speech/{config.ELEVENLABS_VOICE_ID}"
+        "?output_format=mp3_44100_128"
+    )
+    headers = {
+        "xi-api-key": config.ELEVENLABS_API_KEY,
+        "Content-Type": "application/json",
+    }
+    payload = {
+        "text": text,
+        "model_id": config.ELEVENLABS_MODEL,
+    }
+
+    resp = requests.post(url, headers=headers, json=payload, timeout=120)
+    if resp.status_code != 200:
+        raise RuntimeError(
+            f"ElevenLabs API returned {resp.status_code}: "
+            f"{resp.text[:500]}"
+        )
+
+    mp3_path = out_path.with_suffix(".mp3")
+    mp3_path.write_bytes(resp.content)
+
+    if not mp3_path.exists() or mp3_path.stat().st_size == 0:
+        raise RuntimeError("ElevenLabs produced no MP3 file")
+
+    _convert_mp3_to_wav(mp3_path, out_path)
+    mp3_path.unlink(missing_ok=True)
+
+    if not out_path.exists() or out_path.stat().st_size == 0:
+        raise RuntimeError("ElevenLabs produced no output file")
+
+    return out_path
 
 
 # ── Kokoro TTS ────────────────────────────────────────────────────────────────
@@ -303,7 +360,9 @@ def generate_audio(scripts: list[dict], slug: str) -> list[Path]:
         )
 
         try:
-            if backend == "kokoro":
+            if backend == "elevenlabs":
+                _generate_elevenlabs(text, out_path)
+            elif backend == "kokoro":
                 _generate_kokoro(text, out_path)
             elif backend == "piper":
                 _generate_piper(text, out_path)

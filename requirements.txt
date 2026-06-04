@@ -7,6 +7,8 @@ python-dotenv>=1.0.0
 
 # ── TTS (Edge TTS is the free fallback — Microsoft Neural voices, no API key) ──
 edge-tts>=6.1.0
+# ElevenLabs (hosted, highest quality — env-gated, called via REST with requests):
+requests>=2.28.0
 # Kokoro TTS (best quality, open-weight neural TTS — requires Python 3.10-3.12):
 kokoro>=0.9.4
 soundfile

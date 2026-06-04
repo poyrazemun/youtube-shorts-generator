@@ -76,6 +76,20 @@ IMAGE_NEGATIVE_PROMPT = (
 REPLICATE_IMAGE_MODEL = "black-forest-labs/flux-dev"
 
 # ── TTS Settings ──────────────────────────────────────────────────────────────
+# ElevenLabs (hosted, highest-quality voice — top of the backend priority chain).
+# Env-gated: only used when ELEVENLABS_ENABLED is truthy AND a key is present.
+# Falls back to Kokoro otherwise. See elevenlabs.md for the decision record.
+ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY", "")
+ELEVENLABS_ENABLED = os.getenv("ELEVENLABS_ENABLED", "false").lower() in (
+    "1", "true", "yes", "on"
+)
+# Default voice: "George" — warm, mature British narrator (documentary tone),
+# the ElevenLabs preset that matches Kokoro's bm_george.
+ELEVENLABS_VOICE_ID = os.getenv("ELEVENLABS_VOICE_ID", "JBFqnCBsd6RMkjVDRZzb")
+# eleven_multilingual_v2 = best quality (~1 credit/char).
+# eleven_turbo_v2_5 / eleven_flash_v2_5 = ~½ the credits, near-equal on English.
+ELEVENLABS_MODEL = os.getenv("ELEVENLABS_MODEL", "eleven_multilingual_v2")
+
 PIPER_MODEL = os.getenv("PIPER_MODEL", "en_US-lessac-medium")
 PIPER_BINARY = os.getenv("PIPER_BINARY", "piper")  # must be on PATH
 

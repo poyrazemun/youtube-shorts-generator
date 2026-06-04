@@ -6,7 +6,7 @@
 
 📺 **See it in action:** [@ThatActuallyHappened11 on YouTube](https://www.youtube.com/@ThatActuallyHappened11) — the live channel this repo runs.
 
-You set it up once. From then on, one command per day publishes one short. Topics are picked from a Claude-generated queue scored for virality, scripts use proven hook formulas, images come from FLUX, the voice is Kokoro TTS, and YouTube performance data feeds back into the next batch of topics so the channel learns what works.
+You set it up once. From then on, one command per day publishes one short. Topics are picked from a Claude-generated queue scored for virality, scripts use proven hook formulas, images come from FLUX, the voice is ElevenLabs (or free Kokoro TTS), and YouTube performance data feeds back into the next batch of topics so the channel learns what works.
 
 ---
 
@@ -73,9 +73,15 @@ The pipeline is a six-step CLI: pick a topic from the scored queue, write the sc
 | Claude localizations (title + description × 4 languages, Haiku 4.5) | ~$0.005 |
 | Image generation — HuggingFace FLUX.1-schnell (`HUGGINGFACE_API_TOKEN` set) | **Free** |
 | Image generation — Replicate FLUX.1-dev (5 × $0.025) | $0.125 |
-| Kokoro TTS, captions, ffmpeg assembly, YouTube upload | Free |
+| Voice — Kokoro TTS (default) + captions, ffmpeg assembly, YouTube upload | Free |
+| Voice — ElevenLabs (optional, if `ELEVENLABS_ENABLED=true`) | flat $5/mo subscription† |
 | **Total: HuggingFace path** | **~$0.03** |
 | **Total: Replicate path** | **~$0.16** |
+
+† ElevenLabs Starter is a **flat $5/mo** plan (30,000 credits ≈ 54 videos on `eleven_multilingual_v2`,
+~108 on a Flash model), **not** a per-render charge — so it doesn't appear in `cost.json`, which tracks
+only marginal API spend. Effective per-video cost is $5 ÷ videos-that-month (≈ $0.09–0.17 at a daily
+cadence). A monetized channel needs at least Starter for commercial rights anyway. See `elevenlabs.md`.
 
 Switching to HuggingFace saves about 80% per video. The Replicate path is the safer fallback (no rate limits, consistent quality on FLUX.1-dev) but you pay per image.
 
@@ -94,7 +100,7 @@ Switching to HuggingFace saves about 80% per video. The Replicate path is the sa
   Step 2b  localizer.py          Haiku 4.5 → es/pt/hi/id title + description, cached in scripts.json
   Step 2.5 content_safety.py     Claude evaluates the script vs. YouTube demotion rules; halts before image spend on a fail
   Step 3   image_generator.py    FLUX (HuggingFace schnell, or Replicate dev) → 5 cinematic 9:16 images
-  Step 4   tts_generator.py      Kokoro neural TTS → narration audio (fallback: Piper → Coqui → Edge TTS)
+  Step 4   tts_generator.py      ElevenLabs (if enabled) → Kokoro neural TTS → narration audio (fallback: Piper → Coqui → Edge TTS)
   Step 5a  captions.py           Whisper / estimation → word-timed subtitles
   Step 5b  video_assembler.py    ffmpeg → 1080×1920 MP4 with burned captions + CTA overlay + background music
   Step 6   youtube_uploader.py   YouTube Data API v3 → upload video + SRT caption track + localized metadata
@@ -114,6 +120,7 @@ Switching to HuggingFace saves about 80% per video. The Replicate path is the sa
 - Anthropic API key (Claude)
 - YouTube Data API v3 OAuth credentials
 - Replicate API token (for image generation, ~$0.025/image with FLUX.1-dev — see [Cost](#how-it-works))
+- *(Optional)* ElevenLabs API key + Starter plan ($5/mo) for premium hosted voice — else free Kokoro is used
 
 ```bash
 pip install -r requirements.txt
@@ -144,6 +151,11 @@ cp .env.example .env
 ANTHROPIC_API_KEY=sk-ant-...
 REPLICATE_API_TOKEN=r8_...      # ~$0.025/image with FLUX.1-dev (5 images = $0.125 per video)
 YOUTUBE_PRIVACY=private
+
+# Optional — premium hosted voice (else free Kokoro is used):
+ELEVENLABS_ENABLED=true         # flat $5/mo Starter; omit/false to stay on Kokoro
+ELEVENLABS_API_KEY=sk_...       # elevenlabs.io → Settings → API Keys
+ELEVENLABS_VOICE_ID=...         # Voice Library → pick a voice → Copy Voice ID
 ```
 
 **2. YouTube API credentials**
@@ -236,7 +248,7 @@ The full per-script verdict is saved to `output/<slug>/safety.json` for audit. S
 
 Every successful run records per-step wall-clock + Claude token usage + image-generation counts (per provider) and writes two artifacts:
 
-- **`output/<slug>/cost.json`** — full breakdown for that one video (steps, timings, tokens, image counts, USD totals).
+- **`output/<slug>/cost.json`** — full breakdown for that one video (steps, timings, tokens, image counts, USD totals). Tracks **marginal** API spend only (Claude tokens + per-image provider charges); flat subscriptions like ElevenLabs TTS ($5/mo) are not included since they aren't per-render.
 - **`output/cost_ledger.txt`** — chronological one-line-per-video append-only log with a `TOTAL` footer recomputed each run. Re-running the same slug replaces the existing row instead of duplicating it.
 
 Both files are gitignored. After each successful run a one-line summary prints to the console:
@@ -311,12 +323,28 @@ Each image is retried up to 3 times with exponential backoff before falling back
 
 | Priority | Backend | Requirement |
 |---|---|---|
-| 1 | **Kokoro** (open-weight neural TTS) | `pip install kokoro>=0.9.4 soundfile` + espeak-ng + Python 3.10–3.12 |
-| 2 | Piper TTS (local) | Binary on PATH |
-| 3 | Coqui TTS (local) | `pip install TTS` |
-| 4 | **Edge TTS** | Included in requirements.txt (always available fallback) |
+| 1 | **ElevenLabs** (hosted, highest quality) | `ELEVENLABS_ENABLED=true` + `ELEVENLABS_API_KEY` in `.env` (Starter $5/mo) |
+| 2 | **Kokoro** (open-weight neural TTS) | `pip install kokoro>=0.9.4 soundfile` + espeak-ng + Python 3.10–3.12 |
+| 3 | Piper TTS (local) | Binary on PATH |
+| 4 | Coqui TTS (local) | `pip install TTS` |
+| 5 | **Edge TTS** | Included in requirements.txt (always available fallback) |
+
+ElevenLabs sits at the top of the chain but is **env-gated**: it's only used when
+`ELEVENLABS_ENABLED=true` *and* a key is present, otherwise the pipeline falls back to
+Kokoro. See `elevenlabs.md` for the cost/decision record.
 
 Default Kokoro voice: `bm_george` (British Male) at `KOKORO_SPEED=1.1`.
+
+### Using ElevenLabs
+
+Set in `.env` (no code changes needed):
+
+```env
+ELEVENLABS_ENABLED=true
+ELEVENLABS_API_KEY=...                       # from elevenlabs.io
+ELEVENLABS_VOICE_ID=JBFqnCBsd6RMkjVDRZzb     # "George" — British narrator
+ELEVENLABS_MODEL=eleven_multilingual_v2      # or eleven_flash_v2_5 (½ the credits)
+```
 
 ### Customising Voice
 
