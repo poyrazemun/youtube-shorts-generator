@@ -117,7 +117,7 @@ Alternatively, pick a specific topic by its ID from `--list-topics`:
 ```bash
 py -3.12 orchestrator.py --pick a3f2
 ```
-Runs the full pipeline on that topic. Works with `--no-upload`, `--no-edit`, `--verbose`. If the topic was already marked done or failed, a warning is shown but it runs anyway.
+Runs the full pipeline on that topic. Works with `--no-upload`, `--no-edit`, `--verbose`, `--script-check`. If the topic was already marked done or failed, a warning is shown but it runs anyway.
 
 ### Step 4 — Check your analytics (after videos get views)
 ```bash
@@ -180,6 +180,10 @@ py -3.12 orchestrator.py --auto --verbose
 
 # Skip prompt editing pause (automation mode — behaves like before this feature was added)
 py -3.12 orchestrator.py --auto --no-edit
+
+# Review the spoken narration before any image/TTS spend — pauses after
+# scripts.json is written so you can fact-check / edit the text by hand
+py -3.12 orchestrator.py --auto --script-check
 
 # Re-run after a failure (pipeline is resumable — picks up where it left off)
 py -3.12 orchestrator.py --auto
@@ -372,6 +376,29 @@ The `prompts/` folder is gitignored — prompt files are local only.
 
 ---
 
+## Reviewing the Spoken Script Before Render (`--script-check`)
+
+Where `--no-edit` is about the *input* to Claude, `--script-check` is about the *output*. It lets you read and fix the exact narration that will be spoken in the video — the `full_script` and beat fields (`hook`, `context`, `rehook`, `twist`, `ending_fact`) — and confirm it's 100% accurate before any image-generation or TTS spend.
+
+Run with the flag on any mode:
+```bash
+py -3.12 orchestrator.py --auto --script-check
+```
+
+The pipeline generates the scripts, writes them to disk, then pauses:
+```
+Pipeline paused. Script saved to 'output/<slug>/scripts.json'. Review or edit the file now. Press [ENTER] to reload and continue...
+```
+
+Open `output/<slug>/scripts.json` in any editor, read the narration, fix any wording or factual errors, and **save the file**. Then press ENTER — the pipeline re-reads `scripts.json` from disk so every downstream step (content safety, scene planning, images, TTS, subtitles) uses your edited text.
+
+Notes:
+- The pause happens **before** the content-safety check, so your edits are safety-checked too.
+- It's skipped under `--dry-run` (zero API spend stays zero).
+- If you don't edit the file, just press ENTER to continue with the generated script as-is.
+
+---
+
 ## Troubleshooting
 
 | Problem | Fix |
@@ -392,3 +419,4 @@ The `prompts/` folder is gitignored — prompt files are local only.
 | CTA overlay missing or clipped | Check ffmpeg version supports drawtext filter (`ffmpeg -filters \| grep drawtext`) |
 | Script cached with old format | Delete `output/<slug>/scripts.json` and re-run to regenerate |
 | Want to skip prompt editing | Add `--no-edit` flag — pipeline skips the pause and sends prompts straight to Claude |
+| Want to read/fix the spoken narration before render | Add `--script-check` flag — pipeline pauses after `scripts.json` is written so you can edit it, then reloads on ENTER |

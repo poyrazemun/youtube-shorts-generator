@@ -169,7 +169,7 @@ def _print_results(upload_results: list):
     print()
 
 
-def run_pipeline(topic: str, keyword: str, count: int, skip_upload: bool = False, verbose: bool = False, no_edit: bool = False, preset: str | None = None, dry_run: bool = False, manual_images: bool = False):
+def run_pipeline(topic: str, keyword: str, count: int, skip_upload: bool = False, verbose: bool = False, no_edit: bool = False, preset: str | None = None, dry_run: bool = False, manual_images: bool = False, script_check: bool = False):
     """
     Execute the full pipeline end-to-end.
 
@@ -180,6 +180,9 @@ def run_pipeline(topic: str, keyword: str, count: int, skip_upload: bool = False
         skip_upload: If True, skip YouTube upload (useful for testing)
         verbose: If True, set console log level to DEBUG
         no_edit: If True, skip prompt editing pause (automation mode)
+        script_check: If True, pause after writing scripts.json so the user can
+                      manually review/edit the file, then re-read it from disk
+                      before continuing.
         dry_run: If True, skip Claude (use fixture event + script), force PIL
                  image backend, and skip YouTube upload — zero API spend, to
                  validate pipeline wiring after structural changes.
@@ -255,6 +258,19 @@ def run_pipeline(topic: str, keyword: str, count: int, skip_upload: bool = False
         sys.exit(1)
     finally:
         tracker.end_step("script_generation")
+
+    # ── SCRIPT CHECK PAUSE (--script-check) ────────────────────────────────────
+    # Halt after scripts.json is fully on disk so the user can hand-edit it,
+    # then re-read it so every downstream step uses the edited data.
+    if script_check and not dry_run:
+        scripts_path = config.OUTPUT_DIR / slug / "scripts.json"
+        print(
+            f"Pipeline paused. Script saved to '{scripts_path}'. "
+            "Review or edit the file now. Press [ENTER] to reload and continue..."
+        )
+        input()
+        scripts = json.loads(scripts_path.read_text(encoding="utf-8"))
+        logger.info(f"Reloaded {len(scripts)} script(s) from {scripts_path} after manual review.")
 
     # ── STEP 2.5: Content Safety Check ─────────────────────────────────────────
     # Halts the run BEFORE any image-generation spend if Claude flags the
@@ -625,6 +641,16 @@ Examples:
         ),
     )
     parser.add_argument(
+        "--script-check",
+        action="store_true",
+        dest="script_check",
+        help=(
+            "Pause the pipeline right after scripts.json is written, before any "
+            "further processing. Review or edit scripts.json by hand, then press "
+            "ENTER to reload the edited file from disk and continue."
+        ),
+    )
+    parser.add_argument(
         "--preset",
         default=None,
         choices=list_presets(),
@@ -841,6 +867,7 @@ Examples:
                 no_edit=args.no_edit,
                 preset=args.preset,
                 manual_images=args.manual_images,
+                script_check=args.script_check,
             )
             topic_discovery.mark_topic_done(entry["id"], slug)
             logger.info(f"[pick] Topic '{entry['keyword']}' complete.")
@@ -881,6 +908,7 @@ Examples:
                 no_edit=args.no_edit,
                 preset=args.preset,
                 manual_images=args.manual_images,
+                script_check=args.script_check,
             )
             topic_discovery.mark_topic_done(entry["id"], slug)
             logger.info(f"[auto] Topic '{entry['keyword']}' complete.")
@@ -909,6 +937,7 @@ Examples:
             preset=args.preset,
             dry_run=args.dry_run,
             manual_images=args.manual_images,
+            script_check=args.script_check,
         )
 
 

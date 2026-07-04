@@ -16,6 +16,7 @@ You set it up once. From then on, one command per day publishes one short. Topic
 - **Content-safety pre-check** — every script is evaluated against YouTube's demotion rules before any image-generation spend; failed scripts halt the pipeline and are marked failed in the queue.
 - **Scene-aware image prompts** — role + preset system, plus per-beat `scene_visuals` so the 5 images describe distinct moments (wide → close-up → portrait → action → aftermath) instead of 5 near-identical takes on one theme.
 - **Manual image A/B mode** — `--manual-images` pauses the pipeline after scene planning so you can drop in images from Midjourney / DALL-E / Sora / etc. and resume; lets you A/B test external generators against the FLUX baseline. See [manual-usage.md](manual-usage.md).
+- **Script review pause** — `--script-check` halts the pipeline right after `scripts.json` is written so you can read the exact narration that will be spoken and fact-check / hand-edit it before any image-generation or TTS spend; press ENTER to reload the edited file and continue.
 - **Multi-language metadata** — title + description auto-translated to Spanish / Portuguese / Hindi / Indonesian via Haiku 4.5 and attached to the upload as YouTube `localizations`.
 - **Real caption tracks** — SRT uploaded via `captions.insert`, so the CC button in the YouTube player exposes a selectable English track (not just burned-in pixels).
 - **Whisper-timed subtitles** — burned-in 3-word cards synced to the audio, with a CTA overlay in the last 3 seconds.
@@ -222,12 +223,18 @@ py -3.12 orchestrator.py --dry-run
 # same command to resume from TTS through upload. See manual-usage.md.
 py -3.12 orchestrator.py --auto --manual-images
 
+# Script check — pause right after scripts.json is written so you can read the
+# exact narration that will be spoken in the video and fact-check / fix it by
+# hand. Press ENTER to reload the edited file and continue.
+py -3.12 orchestrator.py --auto --script-check
+
 # Flags available on all modes
 --no-upload      skip YouTube upload, save videos locally
 --no-edit        skip prompt editing pause (automation mode)
 --verbose        DEBUG-level console logging
 --dry-run        skip Claude + force PIL images + skip upload (no API spend)
 --manual-images  pause after scene planning; resume once you have dropped img_0..N.png into the printed folder
+--script-check   pause after scripts.json is written so you can review/edit the spoken text, then ENTER to reload and continue
 ```
 
 ---
